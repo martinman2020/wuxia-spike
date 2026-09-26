@@ -321,4 +321,33 @@
 
 <li>Godot 4：原生支援 WebP；樞軸 <code>Node2D</code> + <code>Sprite2D</code>（簡單路）或 <code>Skeleton2D</code> + <code>Bone2D</code>（骨骼權重／IK）</li><li>Unity：<b>唔支援 WebP 匯入</b>（已 export PNG 版）；父 GameObject + 子 <code>SpriteRenderer</code> 就做得到，唔一定要 2D Animation package；<b>座標要翻</b>（Y 向上 + 旋轉反號，最易出錯嘅一點）</li><li>Unity 版<b>未編譯／未執行</b>（本機無 Unity：需帳號＋license＋體積），數學同 Godot 版一致，第一次開預期要微調</li>
 
+
+<hr>
+
+<h2>16. 遊戲內角色打擊演出（2026-09-26 加入）</h2>
+
+<p>spike 004／005 嘅 2D 骨架演出已經<b>直接接入遊戲本體</b>：攻擊牌 → 全屏演出（角色收招 → 出劍 → 命中定格 → 收勢），敵人係假人，命中時白閃 + 墨點粒子 + 傷害數字 + 假人位移，約 0.95 秒。</p>
+
+<table>
+<tr><th>設計決定</th><th>原因</th></tr>
+<tr><td>每回合只演<b>第一次</b>攻擊</td><td>每回合出 3–4 張牌，全演會變手遊咁慢；之後用輕量 cut-in</td></tr>
+<tr><td><b>點畫面跳過</b></td><td>想快刷嘅玩家唔會被鎖住</td></tr>
+<tr><td>部件與數值由 <code>art/rig/rig-data.json</code> 讀入</td><td>同 spike 004／005 同一個檔，換素材／調樞軸唔使改代碼</td></tr>
+<tr><td>部件載入後比對尺寸，唔對就 <code>console.warn</code></td><td>素材換過會即時發現，唔會靜靜地爆位</td></tr>
+<tr><td>開唔到舞台（部件未載入／精簡模式／sim）自動退回 cut-in</td><td>演出層永遠唔會阻塞遊戲流程</td></tr>
+</table>
+
+<p><b>實機驗證（真瀏覽器 + CDP，2026-09-26）</b></p>
+
+<table>
+<tr><th>驗證項</th><th>結果</th></tr>
+<tr><td>部件對位</td><td>arm_front 252×211 在 (213,0)、<code>--ox</code> 3.2px、<code>--oy</code> 176.4px（＝肩樞軸 216,176.4）✅ 同 Godot 版一致</td></tr>
+<tr><td>出招動畫</td><td>t≈0.30s 手臂矩陣旋轉 10.5° + 位移 11.6px、根節點推前 25px；t≈0.65s 回落 1.95°／3.8px ✅ 符合 keyframes</td></tr>
+<tr><td>命中效果</td><td>t≈0.65s 假人帶 <code>s-hit</code>、16 粒墨點 + 1 條斬擊光帶在場 ✅</td></tr>
+<tr><td>演出收尾</td><td>t≈1.55s 舞台隱藏、transform 復位 ✅</td></tr>
+<tr><td>每回合只演一次</td><td>同回合第二次出招 → 舞台唔開、改用 cut-in ✅</td></tr>
+<tr><td>點畫面跳過</td><td>點擊後立即隱藏 ✅</td></tr>
+<tr><td>JS 錯誤</td><td>全程 0 ✅</td></tr>
+</table>
+
 </main></body></html>
