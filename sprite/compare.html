@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spike 006 — 逐格動作對比（v3 修正對齊）</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#efece4; color:#2a2622;
+    font-family: -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  header { padding:14px 16px 10px; border-bottom:1px solid #d8d2c4; background:#f7f5ef; }
+  h1 { margin:0; font-size:17px; letter-spacing:.02em; }
+  .sub { font-size:12px; color:#7a7264; margin-top:4px; line-height:1.5; }
+  .sets { display:flex; gap:8px; flex-wrap:wrap; padding:10px 16px 0; }
+  .sets button { border:1px solid #cfc7b6; background:#fff; color:#3a352d; border-radius:999px;
+    padding:7px 13px; font-size:13px; cursor:pointer; }
+  .sets button.on { background:#2b579a; border-color:#2b579a; color:#fff; }
+  #wrap { position:relative; display:flex; align-items:center; justify-content:center;
+    min-height:56vh; margin:12px 16px; background:#fff; border:1px solid #ddd6c8; border-radius:8px;
+    overflow:hidden; }
+  #stage { position:relative; line-height:0; }
+  #frame, #ghost { display:block; max-width:100%; }
+  #ghost { position:absolute; inset:0; opacity:.28; pointer-events:none; }
+  #guide { position:absolute; inset:0; pointer-events:none; }
+  #guide .g { position:absolute; background:#c0392b; opacity:.5; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+    padding:0 16px 14px; font-size:13px; }
+  .bar button { border:1px solid #cfc7b6; background:#fff; border-radius:6px; padding:7px 12px; cursor:pointer; }
+  .bar button.on { background:#2b579a; border-color:#2b579a; color:#fff; }
+  #hud { font-variant-numeric:tabular-nums; color:#5d5749; }
+  .note { margin:0 16px 20px; font-size:12px; color:#6b6455; line-height:1.7;
+    border-left:3px solid #cfc7b6; padding-left:10px; }
+  input[type=range] { width:130px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>逐格動作對比（v3 對齊修正）</h1>
+  <div class="sub">全部由「一張圖多格」生成 → 自動切格 → 地平線／重心對齊（唔縮放）。
+    睇「殘影」同「參考線」就知對齊準唔準。</div>
+</header>
+
+<div class="sets" id="sets"></div>
+
+<div id="wrap">
+  <div id="stage">
+    <img id="ghost" alt="">
+    <img id="frame" alt="">
+    <div id="guide"></div>
+  </div>
+</div>
+
+<div class="bar">
+  <button id="play" class="on">暫停</button>
+  <button id="prev">上一格</button>
+  <button id="next">下一格</button>
+  <button id="onion">殘影</button>
+  <button id="lines">參考線</button>
+  <label>速度 <input id="fps" type="range" min="4" max="24" step="1" value="10"><span id="fpsv">10</span> fps</label>
+  <span id="hud"></span>
+</div>
+
+<div class="note">
+  <b>點樣判斷流暢度：</b>開「殘影」→ 上一格會淡出喺背後，若兩格嘅人形大幅錯位（頭／腳跳位）就係生成嘅姿勢唔夠貼，唔係切格問題。
+  開「參考線」→ 紅線係統一同一個地平線同中線，角色應貼住紅線。
+</div>
+
+<script>
+const SETS = [
+  { id:'T4', label:'橫刺 4 格（新，有角色參考圖）', n:4,  w:535, h:653 },
+  { id:'S6', label:'斜劈 9 格（新，有角色參考圖）', n:9,  w:393, h:441 },
+  { id:'o6', label:'舊 6 格（無參考圖，有兩把劍）',   n:6,  w:457, h:250 },
+];
+let cur = SETS[0], idx = 0, playing = true, fps = 10, timer = null;
+const elFrame = document.getElementById('frame'), elGhost = document.getElementById('ghost');
+const elGuide = document.getElementById('guide'), elHud = document.getElementById('hud');
+
+function url(set, i) { return './sets/' + set.id + '/f' + i + '.webp'; }
+function load() {
+  elFrame.src = url(cur, idx);
+  elGhost.src = url(cur, (idx - 1 + cur.n) % cur.n);
+  const st = document.getElementById('stage');
+  st.style.width = cur.w + 'px'; st.style.height = cur.h + 'px';
+  elFrame.style.width = cur.w + 'px';
+  elHud.textContent = `第 ${idx+1}/${cur.n} 格｜${fps} fps｜${cur.w}×${cur.h}`;
+}
+function tick() { idx = (idx + 1) % cur.n; load(); }
+function setPlay(on) {
+  playing = on; document.getElementById('play').textContent = on ? '暫停' : '播放';
+  document.getElementById('play').classList.toggle('on', on);
+  clearInterval(timer);
+  if (on) timer = setInterval(tick, 1000 / fps);
+}
+document.getElementById('play').onclick = () => setPlay(!playing);
+document.getElementById('prev').onclick = () => { setPlay(false); idx = (idx - 1 + cur.n) % cur.n; load(); };
+document.getElementById('next').onclick = () => { setPlay(false); idx = (idx + 1) % cur.n; load(); };
+document.getElementById('onion').onclick = e => {
+  const on = e.target.classList.toggle('on');
+  elGhost.style.display = on ? 'block' : 'none';
+};
+document.getElementById('lines').onclick = e => {
+  const on = e.target.classList.toggle('on');
+  elGuide.innerHTML = '';
+  if (!on) return;
+  const ground = document.createElement('div'); const mid = document.createElement('div');
+  ground.className = 'g'; ground.style.cssText = `left:0;right:0;bottom:${(1 - 647/653)*100}%;height:1px;`;
+  mid.className = 'g'; mid.style.cssText = `top:0;bottom:0;left:50%;width:1px;`;
+  elGuide.append(ground, mid);
+};
+document.getElementById('fps').oninput = e => {
+  fps = +e.target.value; document.getElementById('fpsv').textContent = fps;
+  load(); if (playing) setPlay(true);
+};
+for (const s of SETS) {
+  const b = document.createElement('button');
+  b.textContent = s.label;
+  b.onclick = () => {
+    cur = s; idx = 0;
+    document.querySelectorAll('#sets button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); load();
+  };
+  document.getElementById('sets').appendChild(b);
+}
+document.querySelector('#sets button').classList.add('on');
+elGhost.style.display = 'none';
+load();
+setPlay(true);
+</script>
+</body>
+</html>

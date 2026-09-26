@@ -1,0 +1,36 @@
+{
+ "T4": {
+  "frames": [
+   "f0.webp",
+   "f1.webp",
+   "f2.webp",
+   "f3.webp"
+  ],
+  "bytes": 497784
+ },
+ "S6": {
+  "frames": [
+   "f0.webp",
+   "f1.webp",
+   "f2.webp",
+   "f3.webp",
+   "f4.webp",
+   "f5.webp",
+   "f6.webp",
+   "f7.webp",
+   "f8.webp"
+  ],
+  "bytes": 574976
+ },
+ "o6": {
+  "frames": [
+   "f0.webp",
+   "f1.webp",
+   "f2.webp",
+   "f3.webp",
+   "f4.webp",
+   "f5.webp"
+  ],
+  "bytes": 243694
+ }
+}
