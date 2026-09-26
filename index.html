@@ -80,16 +80,14 @@
   #stageRig { position:absolute; left:0; top:0; width:465px; height:882px; }
   #stageRig img { position:absolute; display:block; transform-origin:var(--ox,50%) var(--oy,50%);
     will-change:transform; }
-  #stageRig img.ghostArm { opacity:.28; filter:blur(2px); display:none; }
-  #stageFx.go #stageRig img.ghostArm { display:block; animation:armThrust .95s cubic-bezier(.3,.7,.2,1) 60ms both; }
   #stageInner.go { animation:rootLunge .95s cubic-bezier(.35,.8,.3,1) both; }
-  #stageInner.go #stageRig .p-arm   { animation:armThrust .95s cubic-bezier(.3,.7,.2,1) both; }
+  #stageInner.go #stageRig .p-arm   { animation:armSlash .95s cubic-bezier(.3,.7,.2,1) both; }
   #stageInner.go #stageRig .p-torso { animation:torsoLean .95s ease-in-out both; }
   #stageInner.go #stageRig .p-head  { animation:headTurn  .95s ease-in-out both; }
-  @keyframes armThrust {
-    0% { transform:rotate(0) } 17% { transform:rotate(-27deg) translateX(-6px) }
-    34% { transform:rotate(15deg) translateX(14px) } 45% { transform:rotate(15deg) translateX(14px) }
-    62% { transform:rotate(6deg) translateX(4px) } 100% { transform:rotate(0) } }
+  @keyframes armSlash {
+    0% { transform:rotate(0) } 17% { transform:rotate(-18deg) translateX(-5px) }
+    34% { transform:rotate(34deg) translateX(12px) } 46% { transform:rotate(34deg) translateX(12px) }
+    64% { transform:rotate(14deg) translateX(4px) } 100% { transform:rotate(0) } }
   @keyframes torsoLean {
     0% { transform:rotate(0) } 17% { transform:rotate(-5deg) } 34% { transform:rotate(7deg) }
     45% { transform:rotate(7deg) } 62% { transform:rotate(3deg) } 100% { transform:rotate(0) } }
@@ -145,9 +143,9 @@
 <div id="stageFx">
   <div id="stageInner">
     <div id="stageRig">
-      <img class="ghostArm" id="srGhost" alt="">
       <img class="p-legs"  id="srLegs"  alt="">
       <img class="p-arm"   id="srArm"   alt="">
+      <img class="p-torso" id="srCover" alt="">
       <img class="p-torso" id="srTorso" alt="">
       <img class="p-head"  id="srHead"  alt="">
     </div>
@@ -446,14 +444,14 @@ function fxVignette(){
 
 // ── 角色打擊演出（2D 骨架，數值來自 art/rig/rig-data.json，同 spike 004/005 同源）──
 let rigReady = false, rigData = null, lastActTurn = -1;
-const RIG_EXPECT = { head:[195,189], torso:[316,230], arm_front:[252,211], legs:[465,534] };
+const RIG_EXPECT = { head:[340,196], torso:[348,262], arm_front:[237,150], legs:[565,461], shoulder:[52,56] };
 
 function loadRig(){
   if (typeof fetch !== 'function' || typeof window === 'undefined' || !document.body) return;    // sim / 無 DOM 環境直接跳過
-  fetch('./art/rig/rig-data.json?v=2').then(r => r.json()).then(d => {
+  fetch('./art/rig/rig-data.json?v=3').then(r => r.json()).then(d => {
     rigData = d;
     const stage = d.stage, piv = d.pivot;
-    const el = { legs:'srLegs', arm_front:'srArm', torso:'srTorso', head:'srHead' };
+    const el = { legs:'srLegs', arm_front:'srArm', torso:'srTorso', head:'srHead', shoulder:'srCover' };
     for (const name in d.parts){
       const p = d.parts[name], img = document.getElementById(el[name]);
       if (!img) continue;
@@ -472,18 +470,6 @@ function loadRig(){
         if (want && (img.naturalWidth !== want[0] || img.naturalHeight !== want[1]))
           console.warn('rig 部件尺寸同 rig-data.json 唔一致：', name, img.naturalWidth, img.naturalHeight, want);
       };
-    }
-    const g = document.getElementById('srGhost');
-    if (g && d.parts.arm_front){
-      g.src = './art/rig/' + d.parts.arm_front.file;
-      g.style.left = d.parts.arm_front.box[0] + 'px';
-      g.style.top  = d.parts.arm_front.box[1] + 'px';
-      g.style.zIndex = 1;
-      const pv = piv['arm_front'];
-      if (pv){
-        g.style.setProperty('--ox', (pv[0]*stage[0] - d.parts.arm_front.box[0]) + 'px');
-        g.style.setProperty('--oy', (pv[1]*stage[1] - d.parts.arm_front.box[1]) + 'px');
-      }
     }
     rigReady = true;
   }).catch(() => { rigReady = false; });
