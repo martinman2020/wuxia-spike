@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spike 001 — 武學對招 core loop</title>
+<style>
+  :root { --ink:#2b2b2b; --paper:#f6f4ef; --line:#c9c2b6; --accent:#7a2f2f; --ok:#3f6b46; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+         font-family: ui-serif, "Noto Serif TC", "Songti TC", serif; font-size:15px; }
+  #app { max-width:880px; margin:0 auto; padding:18px 16px 60px; }
+  h1 { font-size:17px; margin:0 0 2px; letter-spacing:2px; }
+  .sub { font-size:12px; color:#7c7469; margin-bottom:14px; }
+  .panel { border:1px solid var(--line); background:#fffefb; padding:12px 14px; margin-bottom:12px; }
+  .enemy { border-left:4px solid var(--accent); }
+  .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .name { font-weight:700; letter-spacing:1px; }
+  .intent { font-size:13px; color:var(--accent); }
+  .stat { font-size:13px; }
+  .ban { font-size:12px; color:var(--accent); border:1px dashed var(--accent); padding:1px 6px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:8px; margin:10px 0 14px; }
+  .card { border:1px solid var(--line); background:#fffefb; padding:8px 9px; cursor:pointer; text-align:left; font:inherit; }
+  .card:hover:not(:disabled) { border-color:var(--accent); }
+  .card:disabled { opacity:.42; cursor:default; }
+  .card .cost { float:right; font-size:12px; border:1px solid var(--line); padding:0 5px; }
+  .card .cname { font-weight:700; }
+  .card .ctext { font-size:12px; color:#5f584e; line-height:1.35; margin-top:3px; }
+  .banned { border-color:var(--accent); }
+  button.act { font:inherit; padding:7px 14px; border:1px solid var(--ink); background:#fffefb; cursor:pointer; }
+  button.act:hover { background:#efece5; }
+  #log { font-size:12.5px; line-height:1.5; max-height:150px; overflow:auto; color:#4b453c; }
+  .hint { font-size:11.5px; color:#8a8277; margin-top:10px; }
+  .big { font-size:19px; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>武學對招 — Spike 001</h1>
+  <div class="sub">目標：驗證 (1) 對招迴圈好唔好玩 (2) 「江湖記憶／破招」有冇逼你換套路</div>
+  <div id="meta" class="panel"></div>
+  <div id="enemy" class="panel enemy"></div>
+  <div id="me" class="panel"></div>
+  <div id="hand" class="cards"></div>
+  <div class="row">
+    <button class="act" id="endTurn">結束回合（空白鍵）</button>
+    <button class="act" id="restart">重開一局（R）</button>
+  </div>
+  <div class="panel" style="margin-top:12px"><div id="log"></div></div>
+  <div class="hint">按 1–9 出招。用完一局之後答自己：仲想開下一局嗎？</div>
+</div>
+<script>
+// ── 招式表（spike 用：數值全部 hardcode，唔好追求平衡） ──
+const CARDS = {
+  zhijian:  { name:'直刺',      cost:1, text:'造成 6 點傷害',                     fx:(c)=>{ hurt(c,6); } },
+  hengsao:  { name:'橫掃',      cost:1, text:'造成 4 點傷害，並使敵人流血 3',      fx:(c)=>{ hurt(c,4); c.bleed += 3; } },
+  tuishou:  { name:'推手',      cost:1, text:'獲得 5 點護體',                      fx:()=>{ S.block += 5; } },
+  tuna:     { name:'吐納',      cost:0, text:'抽 2 張牌',                          fx:()=>{ draw(2); } },
+  lianhuan: { name:'連環腿',    cost:1, text:'造成 4 點傷害 2 次',                 fx:(c)=>{ hurt(c,4); hurt(c,4); } },
+  dianxue:  { name:'點穴',      cost:1, text:'造成 6 點傷害，敵人軟弱 1 回合',     fx:(c)=>{ hurt(c,6); c.weak = Math.max(c.weak,1); } },
+  yangqi:   { name:'養氣',      cost:1, text:'獲得 2 點氣',                        fx:()=>{ S.energy += 2; } },
+  yunqi:    { name:'運氣療傷',  cost:1, text:'護體 4，回復 3 點生命',              fx:()=>{ S.block += 4; S.hp = Math.min(S.maxHp, S.hp+3); } },
+  poshi:    { name:'破勢',      cost:2, text:'造成 14 點傷害，自身受 4 點傷害',    fx:(c)=>{ hurt(c,14); S.hp -= 4; log('破勢反噬，自身受 4 點傷害'); } },
+};
+const START_DECK = ['zhijian','zhijian','zhijian','tuishou','tuishou','tuna','lianhuan','dianxue','yunqi','poshi','hengsao','yangqi'];
+const ENEMIES = [
+  { name:'山賊',   hp:42, dmg:9,  note:'單純，每回合硬打' },
+  { name:'鏢師',   hp:50, dmg:7,  note:'有時格擋，處理慢' },
+  { name:'掌門',   hp:62, dmg:11, note:'會蓄勢，下一擊加倍' },
+];
+const KEY = 'wuxia_spike_001_stats';
+
+// ── 江湖記憶（跨局狀態）──
+let meta = load();
+function load(){
+  try { const m = JSON.parse(localStorage.getItem(KEY)); if (m && m.runs >= 0) return m; } catch(e){}
+  return { runs:0, wins:0, uses:{}, ban:null };
+}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(meta)); } catch(e){} }
+
+// ── 局內狀態 ──
+let S = null;
+function newRun(){
+  S = {
+    hp:60, maxHp:60, energy:0, energyMax:3, block:0, turn:0,
+    drawPile:[], hand:[], discard:[], uses:{}, enemy:null, idx:0, over:false
+  };
+  drawPile = shuffle(START_DECK.slice());
+  log('— 新局開始 —');
+  startFight(0);
+}
+let drawPile = [];
+function startFight(i){
+  const base = ENEMIES[i];
+  S.idx = i;
+  S.enemy = { name: base.name, hp: base.hp, maxHp: base.hp, dmg: base.dmg,
+              bleed:0, weak:0, block:0, charged:false, note: base.note };
+  S.block = 0;
+  log(`遇上【${base.name}】(${base.note})`);
+  playerTurnStart();
+}
+function playerTurnStart(){
+  S.turn++;
+  S.energy = S.energyMax;
+  S.block = 0;
+  const e = S.enemy;
+  e.block = 0;
+  e.intentCharge = (e.name === '掌門' && e.hp > e.maxHp/2 && !e.charged && Math.random() < .4);
+  if (e.intentCharge) e.charged = true;
+  else if (e.weak > 0) e.weak--;
+  draw(5);
+  render();
+}
+function draw(n){
+  for (let i=0;i<n;i++){
+    if (S.hand.length >= 10) return;
+    if (drawPile.length === 0){
+      if (S.discard.length === 0) return;
+      drawPile = shuffle(S.discard); S.discard = [];
+      log('洗牌：棄牌堆回到武學譜');
+    }
+    S.hand.push(drawPile.pop());
+  }
+}
+
+// ── 行動 ──
+function banned(){ return meta.ban; }
+function hurt(c, dmg){
+  if (banned() && S.lastPlayed === banned()) dmg = Math.max(1, Math.round(dmg*0.7));
+  c.hp -= dmg;
+  log(`對【${c.name}】造成 ${dmg} 點傷害`);
+  if (c.hp <= 0) victory();
+}
+function playCard(i){
+  if (!S || S.over) return;
+  const id = S.hand[i]; if (!id) return;
+  const card = CARDS[id];
+  if (S.energy < card.cost) { log(`氣不足，無法施展【${card.name}】`); return; }
+  S.energy -= card.cost;
+  S.hand.splice(i,1); S.discard.push(id);
+  S.uses[id] = (S.uses[id]||0) + 1;
+  S.lastPlayed = id;
+  const broken = banned() === id;
+  log(`施展【${card.name}】${broken ? '（被破招，效果減弱）' : ''}`);
+  card.fx(S.enemy);
+  S.lastPlayed = null;
+  if (S.hp <= 0) { defeat(); return; }
+  render();
+}
+function endTurn(){
+  if (!S || S.over) return;
+  S.discard.push(...S.hand); S.hand = [];
+  const c = S.enemy;
+  if (c.hp <= 0) return;
+  if (c.bleed > 0){ c.hp -= c.bleed; log(`【${c.name}】流血受 ${c.bleed} 點傷害`); c.bleed = Math.floor(c.bleed/2); if (c.hp <= 0){ victory(); return; } }
+  let dmg = c.dmg;
+  if (c.charged){ dmg *= 2; c.charged = false; log(`【${c.name}】蓄勢爆發！`); }
+  if (c.weak > 0){ dmg = Math.round(dmg*0.75); }
+  const absorbed = Math.min(S.block, dmg);
+  S.hp -= (dmg - absorbed);
+  log(`【${c.name}】攻擊 ${dmg} 點（護體擋 ${absorbed}）`);
+  if (S.hp <= 0){ defeat(); return; }
+  playerTurnStart();
+}
+function victory(){
+  log(`擊敗【${S.enemy.name}】`);
+  if (S.idx + 1 < ENEMIES.length){
+    S.hp = Math.min(S.maxHp, S.hp + 10);
+    log('調息：回復 10 點生命');
+    startFight(S.idx + 1);
+  } else endRun(true);
+}
+function defeat(){ log('你倒下了。'); endRun(false); }
+function endRun(win){
+  S.over = true;
+  meta.runs++; if (win) meta.wins++;
+  const top = topCard(S.uses);
+  meta.ban = top;
+  for (const k in S.uses) meta.uses[k] = (meta.uses[k]||0) + S.uses[k];
+  save();
+  log(`— 本局結束（${win ? '勝' : '敗'}）｜你最常用：${top ? CARDS[top].name : '—'}，下一局敵人會針對這招 —`);
+  render();
+}
+function topCard(uses){
+  let best=null, n=0;
+  for (const k in uses) if (uses[k] > n) { n = uses[k]; best = k; }
+  return best;
+}
+
+// ── 畫面 ──
+function render(){
+  const e = S.enemy;
+  document.getElementById('meta').innerHTML =
+    `<div class="row"><span class="stat">局數 <b>${meta.runs}</b>　勝 <b>${meta.wins}</b></span>
+     <span class="stat">江湖記憶（上局最常用 → 本局被破招）：${meta.ban ? '<span class="ban">'+CARDS[meta.ban].name+'</span>' : '（未有記錄）'}</span></div>`;
+  document.getElementById('enemy').innerHTML = e ?
+    `<div class="row"><span class="name big">${e.name}</span><span class="stat">生命 ${Math.max(0,e.hp)} / ${e.maxHp}</span></div>
+     <div class="row" style="margin-top:6px"><span class="intent">意圖：${e.hp<=0 ? '—' : (e.charged ? '蓄勢（下一擊加倍）' : `攻擊 ${e.weak>0?Math.round(e.dmg*.75):e.dmg}`)}</span>
+     <span class="stat">${e.bleed>0 ? '流血 '+e.bleed+'　' : ''}${e.weak>0 ? '軟弱 '+e.weak+' 回合' : ''}</span></div>` : '';
+  document.getElementById('me').innerHTML =
+    `<div class="row"><span class="name">你</span><span class="stat">生命 ${Math.max(0,S.hp)} / ${S.maxHp}　護體 ${S.block}　氣 ${S.energy} / ${S.energyMax}</span></div>`;
+  const hand = document.getElementById('hand');
+  hand.innerHTML = '';
+  S.hand.forEach((id,i)=>{
+    const c = CARDS[id];
+    const b = document.createElement('button');
+    b.className = 'card' + (banned()===id ? ' banned' : '');
+    b.disabled = S.energy < c.cost || S.over || !S.enemy || S.enemy.hp <= 0;
+    b.innerHTML = `<span class="cost">氣 ${c.cost}</span><span class="cname">${c.name}</span>
+                   <div class="ctext">${c.text}${banned()===id ? '<br><b>今局被破招：效果 −30%</b>' : ''}</div>`;
+    b.onclick = ()=>playCard(i);
+    hand.appendChild(b);
+  });
+  document.getElementById('log').innerHTML = LOG.slice(-40).map(l=>'· '+l).join('<br>');
+  const lg = document.getElementById('log'); lg.scrollTop = lg.scrollHeight;
+}
+let LOG = [];
+function log(s){ LOG.push(s); }
+
+// ── 工具 ──
+function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+document.getElementById('endTurn').onclick = endTurn;
+document.getElementById('restart').onclick = ()=>{ LOG=[]; newRun(); render(); };
+document.addEventListener('keydown', ev=>{
+  if (ev.code === 'Space' || ev.key === 'Enter'){ ev.preventDefault(); endTurn(); }
+  else if (ev.key === 'r' || ev.key === 'R'){ LOG=[]; newRun(); render(); }
+  else if (/^[1-9]$/.test(ev.key)) playCard(parseInt(ev.key,10)-1);
+});
+// 測試接口（browser 驗證用）
+window.spike = { get S(){ return S; }, playCard, endTurn, newRun, meta:()=>meta, CARDS, setBan:(id)=>{ meta.ban=id; save(); render(); } };
+
+newRun();
+render();
+</script>
+</body>
+</html>
