@@ -302,4 +302,23 @@
 <p><b>實測成本</b>：一個角色（生成 + 定線 + 定樞軸）約 1–2 小時；每加一招 30–60 分鐘；每個新角色 3–5 小時。對比手繪逐格 6–12 格 × 9 招 = 每角色 54–108 張圖 → 一人不可行。</p>
 
 <p><b>關鍵取捨</b>：打擊感嘅來源<b>唔係角色動畫本身，係演出層</b>（衝擊幀 + 粒子 + 傷害數字 + 鏡頭）。所以正確策略係：角色只做「大幅度、可讀」嘅動作（收招／出劍），細節交俾演出層補。</p>
+
+<hr>
+
+<h2>15. 引擎移植驗證（spike 005）：素材與數值可重用，代碼要重寫但只係幾行對應</h2>
+
+<p>見 <code>spikes/005-engine-port/README.md</code>。實跑引擎：<b>Godot 4.7.2-stable</b>。</p>
+
+<table>
+<tr><th>驗證項</th><th>結果</th></tr>
+<tr><td>靜止姿勢（4 部件世界座標 + 尺寸）</td><td>4/4 一致（誤差 &lt; 0.01px）</td></tr>
+<tr><td>動畫抽樣（6 個時間點 × 4 條 track）</td><td>6/6 落在 0.6° 內</td></tr>
+<tr><td>WebP 匯入</td><td>4/4 成功</td></tr>
+<tr><td>真 render 出畫面（xvfb + OpenGL3）</td><td>5 格 PNG，肉眼核對人形完整、手臂有動</td></tr>
+</table>
+
+<p><b>便攜層 = <code>spikes/004-2d-rig/rig-data.json</code></b>（舞台尺寸＋部件框＋樞軸）。兩個引擎都係「讀同一個 JSON → 砌同一個骨架 → 用同一組 keyframes」。</p>
+
+<li>Godot 4：原生支援 WebP；樞軸 <code>Node2D</code> + <code>Sprite2D</code>（簡單路）或 <code>Skeleton2D</code> + <code>Bone2D</code>（骨骼權重／IK）</li><li>Unity：<b>唔支援 WebP 匯入</b>（已 export PNG 版）；父 GameObject + 子 <code>SpriteRenderer</code> 就做得到，唔一定要 2D Animation package；<b>座標要翻</b>（Y 向上 + 旋轉反號，最易出錯嘅一點）</li><li>Unity 版<b>未編譯／未執行</b>（本機無 Unity：需帳號＋license＋體積），數學同 Godot 版一致，第一次開預期要微調</li>
+
 </main></body></html>

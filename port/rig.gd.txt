@@ -1,0 +1,184 @@
+extends Node2D
+## Spike 005：把 spike 004 嘅 2D 骨架拼貼演出搬去 Godot 4。
+## 唯一輸入 = rig-data.json（部件框 + 樞軸）＋ 部件圖。所有數值都唔喺代碼寫死。
+##
+## 結構對應（同 CSS/JS 版一一對應）：
+##   CSS transform-origin: OX OY   →  Node2D 樞軸節點（position = 樞軸）
+##   <img left/top> 部件左上角     →  Sprite2D（centered=false，position = -(樞軸-左上角)）
+##   z-index                       →  節點在樹中嘅次序（後 = 上）
+##   @keyframes rotate             →  AnimationPlayer（rotation track）
+##   根節點 translateX             →  root Node2D 嘅 position track
+
+const DUR := 0.95                      # 對應 CSS --dur: 950ms
+# CSS keyframes 嘅時間點（%）同角度（度）→ 見 ../004-2d-rig/rig.html
+const KEYS := [
+	{"t": 0.00, "arm": 0.0,  "torso": 0.0, "head": 0.0, "root": 0},
+	{"t": 0.17, "arm": -27.0, "torso": -5.0, "head": -4.0, "root": -10},
+	{"t": 0.34, "arm": 15.0, "torso": 7.0,  "head": 3.0,  "root": 30},
+	{"t": 0.45, "arm": 15.0, "torso": 7.0,  "head": 3.0,  "root": 30},
+	{"t": 0.62, "arm": 6.0,  "torso": 3.0,  "head": 1.0,  "root": 10},
+	{"t": 1.00, "arm": 0.0,  "torso": 0.0,  "head": 0.0,  "root": 0},
+]
+
+var data: Dictionary
+var pivots := {}
+var sprites := {}
+var stage := Vector2.ZERO
+var player: AnimationPlayer
+
+
+func _ready() -> void:
+	var txt := FileAccess.get_file_as_string("res://rig-data.json")
+	if txt == "":
+		push_error("讀不到 rig-data.json")
+		return
+	data = JSON.parse_string(txt)
+	stage = Vector2(data["stage"][0], data["stage"][1])
+	_build()
+	_build_animation()
+	var args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
+	if "--shot" in args:
+		await _shot_sequence()
+		get_tree().quit()
+	elif "--verify" in args or DisplayServer.get_name() == "headless":
+		_verify()
+		get_tree().quit()
+
+
+## 真係 render 出嚟存 PNG（用 xvfb 虛擬顯示），用嚟肉眼核對 port 之後嘅外觀
+func _shot_sequence() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://shots"))
+	var times := [0.0, 0.162, 0.323, 0.427, 0.589]
+	for i in times.size():
+		await _shot(times[i], "res://shots/pose_%d.png" % i)
+		print("  存 shot pose_%d.png（t=%.3fs）" % [i, times[i]])
+
+
+func _shot(t: float, path: String) -> void:
+	player.play("thrust")
+	player.seek(t, true)
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(ProjectSettings.globalize_path(path))
+
+
+func _build() -> void:
+	# 紙色背景（對應 web 版嘅紙底）
+	var bg := ColorRect.new()
+	bg.name = "bg"
+	bg.color = Color("f4f1e8")
+	bg.size = Vector2(560, 900)
+	bg.z_index = -10
+	add_child(bg)
+
+	var root := Node2D.new()
+	root.name = "root"
+	add_child(root)
+
+	var order := []
+	for name in data["parts"]:
+		order.append(name)
+	order.sort_custom(func(a, b): return int(data["parts"][a]["z"]) < int(data["parts"][b]["z"]))
+
+	for name in order:
+		var p: Dictionary = data["parts"][name]
+		var box := Vector2(p["box"][0], p["box"][1])
+		var piv := _pivot_of(name)                 # 舞台座標
+		var node := Node2D.new()
+		node.name = "pivot_" + name
+		node.position = piv
+		root.add_child(node)
+		var spr := Sprite2D.new()
+		spr.name = "sprite_" + name
+		spr.texture = load("res://" + p["file"])
+		spr.centered = false
+		spr.position = -(piv - box)                # 補償：令部件左上角落在 box 位置
+		node.add_child(spr)
+		pivots[name] = node
+		sprites[name] = spr
+
+
+func _pivot_of(name: String) -> Vector2:
+	if data["pivot"][name] == null:
+		return Vector2.ZERO
+	return Vector2(float(data["pivot"][name][0]) * stage.x, float(data["pivot"][name][1]) * stage.y)
+
+
+func _build_animation() -> void:
+	player = AnimationPlayer.new()
+	player.name = "anim"
+	add_child(player)
+	player.root_node = NodePath("..")             # 路徑相對於 Rig
+
+	var anim := Animation.new()
+	anim.length = DUR
+	anim.step = 0.01
+
+	var tracks := {
+		"pivot_head": "head", "pivot_torso": "torso", "pivot_arm_front": "arm",
+		"root": "root",
+	}
+	for node_name in tracks:
+		var key: String = tracks[node_name]
+		var idx := anim.add_track(Animation.TYPE_VALUE)
+		if node_name == "root":
+			anim.track_set_path(idx, NodePath("root:position"))
+		else:
+			anim.track_set_path(idx, NodePath("root/%s:rotation" % node_name))
+		anim.track_set_interpolation_type(idx, Animation.INTERPOLATION_CUBIC)
+		for k in KEYS:
+			var t: float = float(k["t"]) * DUR
+			if node_name == "root":
+				anim.track_insert_key(idx, t, Vector2(float(k["root"]), 0.0))
+			else:
+				anim.track_insert_key(idx, t, deg_to_rad(float(k[key])))
+
+	var lib := AnimationLibrary.new()
+	lib.add_animation("thrust", anim)
+	player.add_animation_library("", lib)
+
+
+func _verify() -> void:
+	var fails := 0
+	print("=== Godot 4 rig port 驗證（stage %.0fx%.0f）===" % [stage.x, stage.y])
+
+	# 1. 靜止姿勢：部件世界座標必須等於原圖裁切框
+	for name in data["parts"]:
+		var p: Dictionary = data["parts"][name]
+		var spr: Sprite2D = sprites[name]
+		var want := Vector2(float(p["box"][0]), float(p["box"][1]))
+		var got: Vector2 = spr.position + (pivots[name] as Node2D).position
+		var tex: Texture2D = spr.texture
+		var got_size := Vector2(float(tex.get_width()), float(tex.get_height()))
+		var want_size := Vector2(float(p["size"][0]), float(p["size"][1]))
+		var ok_pos: bool = (got - want).length() < 0.01
+		var ok_size: bool = got_size == want_size
+		print("  [%s] %-10s 世界座標 %s（要 %s）｜尺寸 %s（要 %s）"
+			% ["OK" if ok_pos and ok_size else "FAIL", name, got, want, got_size, want_size])
+		if not (ok_pos and ok_size):
+			fails += 1
+
+	# 2. 動畫：抽樣對比 CSS keyframes
+	print("  抽樣（動畫 seek 之後嘅角度，單位：度）")
+	player.play("thrust")
+	for k in KEYS:
+		var t: float = float(k["t"]) * DUR
+		player.seek(t, true)
+		var arm: float = rad_to_deg((pivots["arm_front"] as Node2D).rotation)
+		var torso: float = rad_to_deg((pivots["torso"] as Node2D).rotation)
+		var head: float = rad_to_deg((pivots["head"] as Node2D).rotation)
+		var rootx: float = (pivots["head"] as Node2D).get_parent().position.x
+		var ok: bool = abs(arm - float(k["arm"])) < 0.6 and abs(torso - float(k["torso"])) < 0.6 \
+			and abs(head - float(k["head"])) < 0.6 and abs(rootx - float(k["root"])) < 0.6
+		print("    [%s] t=%.3fs  臂 %.1f（要 %.0f）｜軀幹 %.1f（要 %.0f）｜頭 %.1f（要 %.0f）｜根 x %.1f（要 %.0f）"
+			% ["OK" if ok else "FAIL", t, arm, k["arm"], torso, k["torso"], head, k["head"], rootx, k["root"]])
+		if not ok:
+			fails += 1
+
+	# 3. 部件圖真係載入到（WebP 匯入）
+	print("  部件圖：")
+	for name in sprites:
+		var tex: Texture2D = sprites[name].texture
+		print("    %-10s %s  %dx%d" % [name, "OK" if tex != null else "FAIL", tex.get_width(), tex.get_height()])
+
+	print("=== 結果：%s（失敗 %d 項）===" % ["全部通過" if fails == 0 else "有問題", fails])
