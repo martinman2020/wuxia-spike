@@ -213,21 +213,40 @@
 
 <hr>
 
-<h2>12. 美術層（spike 002 階段，2026-09-25 加入）</h2>
+<h2>12. 美術層（spike 002／003，2026-09-25 加入）</h2>
 
-<p>遊戲頂部多了一行「美術風格」切換：<b>無美術 / 水墨 / 木刻 / 平面</b>，選擇會存落 localStorage（key <code>wuxia_art_style</code>）。</p>
+<p>遊戲頂部有一行「美術風格」切換：<b>無美術 / 水墨 / 木刻（試）/ 平面（試）</b>，選擇存落 localStorage（key <code>wuxia_art_style</code>）。</p>
 
 <table>
 <tr><th>項目</th><th>說明</th></tr>
-<tr><td>素材位置</td><td><code>spikes/002-art-style/assets/</code>（原圖 1024² PNG）＋ <code>webp/</code>（560px WebP，31.4 / 36.4 / 13.9 KB）</td></tr>
-<tr><td>部署路徑</td><td><code>https://martinman2020.github.io/wuxia-spike/art/styleA.webp</code>（A=水墨、B=木刻、C=平面）</td></tr>
-<tr><td>生成方式</td><td>AI 生成（text-to-image），三個風格各一張測試圖</td></tr>
+<tr><td>水墨（A）</td><td><b>全套正式素材</b>：9 張招式圖 + 3 張敵人圖 + 1 張背景，全部 AI 生成</td></tr>
+<tr><td>木刻（B）／平面（C）</td><td>只有 1 張測試圖，牌面用同一張圖裁切（<code>object-position</code>），未生產正式素材</td></tr>
+<tr><td>素材位置</td><td><code>spikes/002-art-style/assets/generated/</code>（原圖 PNG）→ <code>assets/webp/</code>（風格測試圖）→ <code>spikes/001-core-loop/art/A/</code>（遊戲用）</td></tr>
+<tr><td>重新生成</td><td><code>python3 spikes/002-art-style/build-assets.py</code>（會下載 fal 原圖、轉 WebP、寫入 <code>art/A/</code>）</td></tr>
+<tr><td>部署路徑</td><td><code>https://martinman2020.github.io/wuxia-spike/art/A/&lt;檔名&gt;.webp</code></td></tr>
 </table>
 
-<p><b>重要限制（唔好當佢係正式美術）</b>：</p>
-<li>目前<b>每個風格只有一張圖</b>，九張牌同三個敵人全部係同一張圖用唔同 <code>object-position</code> 裁切出嚟</li><li>即係你可以用嚟判斷「風格順唔順眼、牌面夠唔夠清楚、手感有冇改善」，但<b>唔可以</b>用嚟評估真實美術成本</li><li>真正嘅產線成本測試要等到選定風格之後，生成 9 張招式圖 + 3 張敵人圖（spike 003）</li>
+<p><b>水墨素材清單（13 個檔案、合共 268 KB）</b></p>
 
-<p><b>已加入嘅輕量 juice</b>：卡牌 hover 上浮 + 按下縮放、敵人受擊時面板閃紅。</p>
+<table>
+<tr><th>類別</th><th>檔案</th><th>尺寸</th><th>大小</th></tr>
+<tr><td>背景</td><td><code>bg.webp</code></td><td>1000×563</td><td>55.5 KB</td></tr>
+<tr><td>招式（9）</td><td><code>zhijian</code> <code>hengsao</code> <code>lianhuan</code> <code>dianxue</code> <code>poshi</code> <code>tuishou</code> <code>tuna</code> <code>yangqi</code> <code>yunqi</code></td><td>480×480</td><td>11.2–24.6 KB</td></tr>
+<tr><td>敵人（3）</td><td><code>enemy-shanzei</code> <code>enemy-biaoshi</code> <code>enemy-zhangmen</code></td><td>420×420</td><td>14.0–22.0 KB</td></tr>
+</table>
+
+<p><b>打擊動畫（全部純 CSS/JS，無影片檔）</b></p>
+
+<table>
+<tr><th>動作</th><th>效果</th></tr>
+<tr><td>出牌</td><td>卡牌「影子」由手牌位置飛向敵人面板（<code>fx-ghost</code>）</td></tr>
+<tr><td>造成傷害</td><td>斜向斬擊光帶掃過敵人面板（<code>fx-slash</code>）+ 面板左右震動（<code>shake</code>）+ 傷害數字飄升（<code>fx-num</code>）</td></tr>
+<tr><td>得護體／回血</td><td>綠色數字飄升（面板顯示）</td></tr>
+<tr><td>敵人攻擊</td><td>全屏紅色暗角閃（<code>fx-vig</code>）+ 玩家面板震動 + 有擋格時面板綠閃（<code>blocked</code>）</td></tr>
+<tr><td>背景</td><td>水墨山水做固定背景層（<code>#bgLayer</code>，opacity .55），UI 面板保持不透明以免影響文字可讀性</td></tr>
+</table>
+
+<p><b>限制</b>：木刻／平面兩個風格仲未有正式牌圖；想升級任何一個風格，照 <code>build-assets.py</code> 嘅形式生成 13 張圖改個名放落 <code>art/&lt;風格&gt;/</code> 就得。</p>
 
 <p><b>注意</b>：美術對第 8 節嘅數據結論<b>冇影響</b> —— 亂按仍然係最高勝率策略之一。美術唔會令遊戲變得有決策。</p>
 </main></body></html>

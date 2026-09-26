@@ -33,14 +33,16 @@
   #log { font-size:12.5px; line-height:1.5; max-height:150px; overflow:auto; color:#4b453c; }
   .hint { font-size:11.5px; color:#8a8277; margin-top:10px; }
   .big { font-size:19px; font-weight:700; }
-  /* ── 美術層（spike 002 測試）── */
+  /* ── 美術層（spike 002/003）── */
+  #bgLayer { position:fixed; inset:0; z-index:-1; background:#f4f1e8 center/cover no-repeat;
+             opacity:.55; pointer-events:none; }
   #styleBar { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:8px 10px; }
   #styleBar button { font:inherit; font-size:12.5px; padding:4px 10px; border:1px solid var(--line); background:#fffefb; cursor:pointer; }
   #styleBar button.on { background:var(--ink); color:#fffefb; border-color:var(--ink); }
   #styleBar .note { font-size:11px; color:#8a8277; }
-  .thumb { height:70px; margin:-2px -3px 6px; overflow:hidden; border-bottom:1px solid var(--line); }
+  .thumb { height:96px; margin:-3px -4px 7px; overflow:hidden; border-bottom:1px solid var(--line); background:#f1eee6; }
   .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
-  .portrait { width:78px; height:78px; overflow:hidden; flex:0 0 78px; border:1px solid var(--line); }
+  .portrait { width:88px; height:88px; overflow:hidden; flex:0 0 88px; border:1px solid var(--line); }
   .portrait img { width:100%; height:100%; object-fit:cover; display:block; }
   .enemy-top { display:flex; gap:12px; align-items:center; }
   body.artA { background:#f4f1e8; }
@@ -49,11 +51,30 @@
   body.artA .card, body.artB .card, body.artC .card { transition:transform .08s ease, box-shadow .12s ease; }
   body.artA .card:hover:not(:disabled), body.artB .card:hover:not(:disabled), body.artC .card:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 3px 8px rgba(0,0,0,.12); }
   .card:active:not(:disabled) { transform:scale(.97); }
-  @keyframes hit { 0% { background:#fbe9e7 } 100% { background:#fffefb } }
-  .hit { animation:hit .28s ease-out; }
+  /* ── 打擊動畫 ── */
+  @keyframes shakeX { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-5px)} 40%{transform:translateX(5px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)} }
+  .shake { animation:shakeX .3s ease-in-out; }
+  @keyframes slashSweep { 0%{opacity:0;transform:translate(-14px,-10px) rotate(-18deg) scaleX(.4)} 25%{opacity:.95} 100%{opacity:0;transform:translate(14px,10px) rotate(-18deg) scaleX(1.35)} }
+  .fx-slash { position:fixed; pointer-events:none; z-index:60;
+    background:linear-gradient(105deg, rgba(255,255,255,0) 38%, rgba(255,255,255,.92) 46%, rgba(122,47,47,.85) 51%, rgba(255,255,255,0) 60%);
+    animation:slashSweep .42s ease-out forwards; }
+  @keyframes floatUp { 0%{opacity:0;transform:translateY(6px) scale(.8)} 20%{opacity:1;transform:translateY(-4px) scale(1.15)} 100%{opacity:0;transform:translateY(-42px) scale(1)} }
+  .fx-num { position:fixed; z-index:70; font-weight:700; font-size:22px; pointer-events:none;
+    text-shadow:0 1px 3px rgba(255,255,255,.95); animation:floatUp 1s ease-out forwards; }
+  @keyframes ghostFly { 0%{opacity:1;transform:translate(0,0) rotate(0) scale(1)} 100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(-14deg) scale(.42)} }
+  .fx-ghost { position:fixed; z-index:65; pointer-events:none; border:1px solid var(--accent); background:#fffefb;
+    animation:ghostFly .38s ease-in forwards; overflow:hidden; }
+  .fx-ghost img { width:100%; height:100%; object-fit:cover; }
+  @keyframes vignette { 0%{opacity:0} 25%{opacity:.5} 100%{opacity:0} }
+  .fx-vig { position:fixed; inset:0; z-index:55; pointer-events:none;
+    background:radial-gradient(circle at 50% 45%, rgba(255,255,255,0) 35%, rgba(122,47,47,.55) 100%);
+    animation:vignette .5s ease-out forwards; }
+  @keyframes blockPulse { 0%{background:#eef3ee} 100%{background:#fffefb} }
+  .blocked { animation:blockPulse .5s ease-out; }
 </style>
 </head>
 <body>
+<div id="bgLayer"></div>
 <div id="app">
   <h1>武學對招 — Spike 001 v2</h1>
   <div class="sub">v2 改動：敵人加強、冇免費資源卡、「江湖記憶」升級為針對整個招式類型 ・ <a href="./docs.html" style="color:#7a2f2f">機制與數值文檔 →</a></div>
@@ -157,6 +178,9 @@ function playCard(i){
   const id = S.hand[i]; if (!id) return;
   const card = CARDS[id];
   if (S.energy < card.cost) { log(`氣不足，無法施展【${card.name}】`); return; }
+  const handEl = document.getElementById('hand');
+  const btn = (handEl && handEl.children) ? handEl.children[i] : null;
+  const en = S.enemy, hpBefore = en ? en.hp : 0, blockBefore = S.block, myHpBefore = S.hp;
   S.energy -= card.cost;
   S.hand.splice(i,1); S.discard.push(id);
   S.uses[id] = (S.uses[id]||0)+1;
@@ -166,6 +190,16 @@ function playCard(i){
   log(`施展【${card.name}】（${card.type}）`);
   card.fx(S.enemy);
   S.lastType = null;
+  // ── 打擊動畫 ──
+  fxGhost(btn, id);
+  const dealt = hpBefore - Math.max(0, en ? en.hp : 0);
+  const gainedBlock = S.block - blockBefore;
+  const healed = S.hp - myHpBefore;
+  setTimeout(() => {
+    if (dealt > 0){ fxSlash(); fxShake(document.getElementById('enemy')); fxNum('-' + dealt, '#7a2f2f', true); }
+    if (gainedBlock > 0) fxNum('+' + gainedBlock + ' 護體', '#3f6b46', false);
+    if (healed > 0) fxNum('+' + healed, '#3f6b46', false);
+  }, 130);
   if (S.hp <= 0) { defeat(); return; }
   render();
 }
@@ -190,15 +224,16 @@ function endTurn(){
     if (S.hp <= 0) break;
   }
   log(`【${c.name}】${hits}連擊 ${detail.join(' + ')}：共扣 ${totalDealt} 點（護體擋 ${totalBlocked}）`);
-  flashEnemy();
+  fxVignette();
+  fxShake(document.getElementById('me'));
+  const meEl = document.getElementById('me');
+  if (meEl && meEl.classList && totalBlocked > 0){
+    meEl.classList.add('blocked');
+    setTimeout(() => meEl.classList.remove('blocked'), 520);
+  }
+  if (totalDealt > 0) fxNum('-' + totalDealt, '#a33', false);
   if (S.hp <= 0){ defeat(); return; }
   playerTurnStart();
-}
-function flashEnemy(){
-  const el = document.getElementById('enemy');
-  if (!el || !el.classList) return;
-  el.classList.add('hit');
-  setTimeout(() => el.classList.remove('hit'), 300);
 }
 function victory(){
   log(`擊敗【${S.enemy.name}】`);
@@ -232,11 +267,16 @@ const ART_STYLES = [
 const CARD_CROP = { zhijian:'18% 12%', hengsao:'62% 26%', lianhuan:'34% 78%', dianxue:'50% 20%',
                     poshi:'70% 55%', tuishou:'44% 48%', tuna:'26% 62%', yangqi:'78% 74%', yunqi:'52% 88%' };
 const ENEMY_CROP = { '山賊':'16% 26%', '鏢師':'56% 38%', '掌門':'84% 16%' };
+const ENEMY_FILE = { '山賊':'shanzei', '鏢師':'biaoshi', '掌門':'zhangmen' };
+const FULL_SET = ['A'];   // 只有水墨有全套正式素材；B/C 暫時用單張圖裁切
 let artStyle = 'none';
 try { artStyle = localStorage.getItem('wuxia_art_style') || 'none'; } catch(e){}
 function saveArt(){ try { localStorage.setItem('wuxia_art_style', artStyle); } catch(e){} }
-function artURL(){ return './art/style' + artStyle + '.webp'; }
 function artOn(){ return artStyle !== 'none'; }
+function artFull(){ return FULL_SET.includes(artStyle); }
+function artURL(){ return './art/style' + artStyle + '.webp'; }
+function cardArtURL(id){ return artFull() ? './art/A/' + id + '.webp' : artURL(); }
+function enemyArtURL(name){ return artFull() ? './art/A/enemy-' + (ENEMY_FILE[name]||'shanzei') + '.webp' : artURL(); }
 
 function renderStyleBar(){
   const bar = document.getElementById('styleBar');
@@ -247,18 +287,68 @@ function renderStyleBar(){
   bar.appendChild(lab);
   for (const s of ART_STYLES){
     const b = document.createElement('button');
-    b.textContent = s.label;
+    b.textContent = s.label + (FULL_SET.includes(s.id) ? '' : '（試）');
     b.className = (artStyle === s.id ? 'on' : '');
     b.onclick = () => { artStyle = s.id; saveArt(); applyArt(); render(); };
     bar.appendChild(b);
   }
   const n = document.createElement('span');
   n.className = 'note';
-  n.textContent = artOn() ? '（測試用：同一張圖裁切，唔係正式牌圖）' : '（切換睇下邊種風格順眼）';
+  n.textContent = artFull() ? '（水墨：正式牌圖 + 敵人圖 + 背景 + 打擊動畫）'
+                            : (artOn() ? '（測試用：單張圖裁切，未有正式牌圖）' : '（切換睇下邊種風格順眼）');
   bar.appendChild(n);
 }
 function applyArt(){
   if (document.body) document.body.className = artOn() ? 'art' + artStyle : '';
+  const bg = document.getElementById('bgLayer');
+  if (bg && bg.style) bg.style.backgroundImage = artFull() ? `url('./art/A/bg.webp')` : 'none';
+}
+
+// ── 打擊動畫（瀏覽器限定；無 DOM 嘅環境會自動 no-op）──
+function fxReady(){
+  const el = document.getElementById('enemy');
+  return !!(el && typeof el.getBoundingClientRect === 'function' && document.body && document.body.appendChild);
+}
+function fxTemp(cls, css, life){
+  const d = document.createElement('div');
+  d.className = cls;
+  for (const k in css) d.style[k] = css[k];
+  document.body.appendChild(d);
+  setTimeout(() => { if (d.remove) d.remove(); }, life);
+  return d;
+}
+function fxSlash(){
+  if (!fxReady()) return;
+  const r = document.getElementById('enemy').getBoundingClientRect();
+  fxTemp('fx-slash', { left:(r.left-16)+'px', top:(r.top-10)+'px', width:(r.width+32)+'px', height:(r.height+20)+'px' }, 460);
+}
+function fxNum(text, color, nearEnemy){
+  if (!fxReady()) return;
+  const r = (nearEnemy ? document.getElementById('enemy') : document.getElementById('me')).getBoundingClientRect();
+  const d = fxTemp('fx-num', { left:(r.left + r.width*0.55)+'px', top:(r.top + 8)+'px', color:color||'#7a2f2f' }, 1050);
+  d.textContent = text;
+}
+function fxGhost(btn, id){
+  if (!fxReady() || !btn || typeof btn.getBoundingClientRect !== 'function') return;
+  const a = btn.getBoundingClientRect(), b = document.getElementById('enemy').getBoundingClientRect();
+  const d = document.createElement('div');
+  d.className = 'fx-ghost';
+  d.style.left = a.left+'px'; d.style.top = a.top+'px';
+  d.style.width = Math.min(90, a.width)+'px'; d.style.height = Math.min(110, a.height)+'px';
+  d.style.setProperty('--dx', (b.left + b.width/2 - a.left - 45)+'px');
+  d.style.setProperty('--dy', (b.top + b.height/2 - a.top - 55)+'px');
+  d.innerHTML = `<img src="${cardArtURL(id)}" alt="">`;
+  document.body.appendChild(d);
+  setTimeout(() => { if (d.remove) d.remove(); }, 420);
+}
+function fxShake(el){
+  if (!fxReady() || !el || !el.classList) return;
+  el.classList.add('shake');
+  setTimeout(() => el.classList.remove('shake'), 320);
+}
+function fxVignette(){
+  if (!fxReady()) return;
+  fxTemp('fx-vig', {}, 520);
 }
 
 // ── 畫面 ──
@@ -270,7 +360,7 @@ function render(){
      <span class="stat">江湖記憶：${meta.ban ? '<span class="ban">'+meta.ban+'類 −30%</span>' : '（未有記錄）'}</span></div>`;
   document.getElementById('enemy').innerHTML = e ?
     `<div class="enemy-top">
-       ${artOn() ? `<div class="portrait"><img src="${artURL()}" style="object-position:${ENEMY_CROP[e.name]||'50% 50%'}" alt=""></div>` : ''}
+       ${artOn() ? `<div class="portrait"><img src="${enemyArtURL(e.name)}" ${artFull() ? '' : `style="object-position:${ENEMY_CROP[e.name]||'50% 50%'}"`} alt=""></div>` : ''}
        <div style="flex:1">
          <div class="row"><span class="name big">${e.name}</span><span class="stat">生命 ${Math.max(0,e.hp)} / ${e.maxHp}</span></div>
          <div class="row" style="margin-top:6px"><span class="intent">意圖：${e.hp<=0 ? '—' : (e.charged ? '蓄勢（每擊加倍）' : `${e.hits>1?e.hits+'連擊 ':''}攻擊 ${e.weak>0?Math.round(e.dmg*.75):e.dmg}`)}</span>
@@ -287,7 +377,7 @@ function render(){
     const b = document.createElement('button');
     b.className = 'card' + (isBanned(c.type) ? ' banned' : '');
     b.disabled = S.energy < c.cost || S.over || !S.enemy || S.enemy.hp <= 0;
-    b.innerHTML = `${artOn() ? `<div class="thumb"><img src="${artURL()}" style="object-position:${CARD_CROP[id]||'50% 50%'}" alt=""></div>` : ''}<span class="cost">氣 ${c.cost}</span><span class="cname">${c.name}</span> <span class="ctype">${c.type}</span>
+    b.innerHTML = `${artOn() ? `<div class="thumb"><img src="${cardArtURL(id)}" ${artFull() ? '' : `style="object-position:${CARD_CROP[id]||'50% 50%'}"`} alt=""></div>` : ''}<span class="cost">氣 ${c.cost}</span><span class="cname">${c.name}</span> <span class="ctype">${c.type}</span>
                    <div class="ctext">${c.text}${isBanned(c.type) ? '<br><b>被破招 −30%</b>' : ''}</div>`;
     b.onclick = ()=>playCard(i);
     hand.appendChild(b);
