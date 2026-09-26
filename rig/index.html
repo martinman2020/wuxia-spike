@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spike 004 — 2D 角色動作演出（骨架拼貼）</title>
+<style>
+  :root { --ink:#231f1c; --paper:#f4f1e8; --line:#c9c2b6; --accent:#7a2f2f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+         font-family:ui-serif,"Noto Serif TC","Songti TC",serif; font-size:15px; }
+  #app { max-width:760px; margin:0 auto; padding:16px 14px 50px; }
+  h1 { font-size:17px; letter-spacing:1px; margin:0 0 2px; }
+  .sub { font-size:12px; color:#7c7469; margin-bottom:12px; }
+  .panel { border:1px solid var(--line); background:#fffefb; padding:10px 12px; margin-bottom:10px; }
+  .bar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .bar button { font:inherit; font-size:13px; padding:5px 11px; border:1px solid var(--ink); background:#fffefb; cursor:pointer; }
+  .bar button.on { background:var(--ink); color:#fffefb; }
+  .hint { font-size:11.5px; color:#8a8277; }
+
+  /* ── 舞台 ── */
+  #stageWrap { position:relative; width:100%; overflow:hidden; background:
+      radial-gradient(120% 90% at 70% 25%, #fffdf8 0%, #ece7db 70%, #ddd6c7 100%);
+      border:1px solid var(--line); height:66vh; min-height:340px; }
+  #stage { position:absolute; left:0; top:0; width:465px; height:882px;
+           transform-origin:0 0; }
+  #stage img { position:absolute; display:block; image-rendering:auto;
+               transform-origin:var(--ox,50%) var(--oy,50%); will-change:transform; }
+  #rig { position:absolute; left:0; top:0; width:465px; height:882px; }
+  #joints { position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .2s; }
+  #joints.on { opacity:1; }
+  .joint { position:absolute; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; border-radius:50%;
+           background:rgba(122,47,47,.85); box-shadow:0 0 0 2px rgba(255,255,255,.85); }
+  .ghostArm { opacity:.30; filter:blur(2px); }
+
+  /* ── 出招動畫（直刺 0.95s）── */
+  @keyframes armThrust {
+      0% { transform:rotate(0deg) }
+     17% { transform:rotate(-27deg) translateX(-6px) }
+     34% { transform:rotate(15deg) translateX(14px) }
+     45% { transform:rotate(15deg) translateX(14px) }
+     62% { transform:rotate(6deg) translateX(4px) }
+    100% { transform:rotate(0deg) }
+  }
+  @keyframes torsoLean {
+      0% { transform:rotate(0deg) } 17% { transform:rotate(-5deg) } 34% { transform:rotate(7deg) }
+     45% { transform:rotate(7deg) } 62% { transform:rotate(3deg) } 100% { transform:rotate(0deg) }
+  }
+  @keyframes headTurn {
+      0% { transform:rotate(0deg) } 17% { transform:rotate(-4deg) } 34% { transform:rotate(3deg) }
+     62% { transform:rotate(1deg) } 100% { transform:rotate(0deg) }
+  }
+  @keyframes rootLunge {
+      0% { transform:translateX(0) } 17% { transform:translateX(-10px) } 34% { transform:translateX(30px) }
+     45% { transform:translateX(30px) } 62% { transform:translateX(10px) } 100% { transform:translateX(0) }
+  }
+  .anim .p-arm  { animation:armThrust var(--dur,950ms) cubic-bezier(.3,.7,.2,1) both; }
+  .anim .p-torso{ animation:torsoLean var(--dur,950ms) ease-in-out both; }
+  .anim .p-head { animation:headTurn  var(--dur,950ms) ease-in-out both; }
+  .anim #rig   { animation:rootLunge var(--dur,950ms) cubic-bezier(.35,.8,.3,1) both; }
+
+  /* ── 衝擊效果 ── */
+  @keyframes flashOut { 0%{opacity:.92} 100%{opacity:0} }
+  .fx-flash { position:absolute; inset:0; background:#fffefb; pointer-events:none; z-index:40;
+              animation:flashOut .2s steps(2,end) forwards; }
+  @keyframes inkFly { 0%{opacity:1;transform:translate(0,0) scale(1)} 100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.35)} }
+  .ink-p { position:absolute; border-radius:50%; background:#1b1917; z-index:41; pointer-events:none;
+           animation:inkFly .55s ease-out forwards; }
+  @keyframes floatUp { 0%{opacity:0;transform:translateY(8px) scale(.7)} 25%{opacity:1;transform:translateY(-6px) scale(1.2)} 100%{opacity:0;transform:translateY(-52px) scale(1)} }
+  .dmg { position:absolute; z-index:42; font-weight:700; font-size:30px; color:var(--accent);
+         text-shadow:0 2px 6px rgba(255,255,255,.95); animation:floatUp 1s ease-out forwards; }
+  @keyframes dummyHit { 0%{transform:translateX(0)} 30%{transform:translateX(16px) rotate(4deg)} 100%{transform:translateX(0)} }
+  .dummy.hit { animation:dummyHit .45s ease-out; }
+  .dummy { position:absolute; z-index:1; }
+  #phase { font-size:12.5px; color:var(--accent); min-height:18px; }
+  table.k { border-collapse:collapse; font-size:12.5px; width:100%; }
+  table.k td,table.k th { border:1px solid var(--line); padding:3px 6px; text-align:left; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>2D 角色動作演出 — Spike 004</h1>
+  <div class="sub">做法：由<b>單一張</b>角色圖裁出部件（同源保證一致）→ 依骨架樞軸旋轉 → 演出層（衝擊幀／粒子／傷害數字）</div>
+
+  <div class="panel bar">
+    <button id="btnPlay">出招：直刺</button>
+    <button id="btnLoop">循環播放</button>
+    <button id="btnJoints">骨骼點</button>
+    <button id="btnSlow">速度 1.0×</button>
+    <button id="btnGhost">殘像</button>
+  </div>
+
+  <div id="stageWrap">
+    <div id="stage">
+      <div id="rig">
+        <!-- 敵人（假人） -->
+        <img class="dummy" id="dummy" src="../art/A/enemy-shanzei.webp" alt=""
+             style="left:258px; top:300px; width:200px; opacity:.88; filter:grayscale(.25)">
+        <!-- 骨架部件（left/top = 原圖座標，樞軸寫在 --ox/--oy） -->
+        <img class="p-legs"  id="pLegs"  src="./assets/parts/legs.webp"  alt="" style="left:0px;   top:383px;">
+        <img class="ghostArm" id="pArmGhost" src="./assets/parts/arm_front.webp" alt=""
+             style="left:158px; top:0px; --ox:28px; --oy:172px; z-index:2; display:none;">
+        <img class="p-arm"   id="pArm"   src="./assets/parts/arm_front.webp" alt=""
+             style="left:158px; top:0px; --ox:28px; --oy:172px; z-index:4;">
+        <img class="p-torso" id="pTorso" src="./assets/parts/torso.webp" alt=""
+             style="left:0px; top:136px; --ox:112px; --oy:261px; z-index:5;">
+        <img class="p-head"  id="pHead"  src="./assets/parts/head.webp"  alt=""
+             style="left:0px; top:0px;   --ox:135px; --oy:137px; z-index:6;">
+        <div id="joints">
+          <div class="joint" style="left:135px; top:137px;"></div><!-- 頸 -->
+          <div class="joint" style="left:112px; top:397px;"></div><!-- 腰 -->
+          <div class="joint" style="left:186px; top:172px;"></div><!-- 肩 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="phase">按「出招：直刺」開始</div>
+    <div class="hint" id="stat">舞台 465×882（以 3:1 裁切比例換算，實際顯示會等比縮放）</div>
+  </div>
+
+  <div class="panel">
+    <table class="k">
+      <tr><th>部件</th><th>樞軸</th><th>動作</th></tr>
+      <tr><td>head</td><td>頸 (135,137)</td><td>−4° → +3°（隨身體轉）</td></tr>
+      <tr><td>torso</td><td>腰 (112,397)</td><td>−5° → +7°（前壓）</td></tr>
+      <tr><td>arm_front</td><td>肩 (186,172)</td><td>−27° → +15°（收 → 刺）</td></tr>
+      <tr><td>legs</td><td>—（根）</td><td>整個舞台向前撲 30px</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+const stage = document.getElementById('stage');
+const wrap = document.getElementById('stageWrap');
+const DUR = 950;
+
+function fit(){
+  const s = Math.min(wrap.clientWidth / 465, wrap.clientHeight / 882);
+  stage.style.transform = `scale(${s})`;
+  stage.style.left = ((wrap.clientWidth - 465*s) / 2) + 'px';
+  stage.style.top  = ((wrap.clientHeight - 882*s) / 2) + 'px';
+}
+window.addEventListener('resize', fit); fit();
+
+let speed = 1, looping = false, ghostOn = false, timer = null;
+const PHASES = [[0,'預備'],[.17,'收招蓄勢'],[.30,'出劍！'],[.45,'命中定格'],[.62,'收勢'],[1,'預備']];
+
+function sayPhase(p){
+  const el = document.getElementById('phase');
+  let label = PHASES[0][1];
+  for (const [t, txt] of PHASES) if (p >= t) label = txt;
+  el.textContent = label;
+}
+
+function flash(){
+  const d = document.createElement('div');
+  d.className = 'fx-flash';
+  wrap.appendChild(d); setTimeout(() => d.remove(), 240);
+}
+function particles(){
+  const r = document.getElementById('dummy').getBoundingClientRect();
+  const w = wrap.getBoundingClientRect();
+  const cx = r.left - w.left + r.width*0.35, cy = r.top - w.top + r.height*0.4;
+  for (let i = 0; i < 14; i++){
+    const a = Math.random()*Math.PI*2, dist = 30 + Math.random()*70, s = 4 + Math.random()*8;
+    const d = document.createElement('div');
+    d.className = 'ink-p';
+    d.style.cssText = `left:${cx}px;top:${cy}px;width:${s}px;height:${s}px;--dx:${(Math.cos(a)*dist).toFixed(0)}px;--dy:${(Math.sin(a)*dist).toFixed(0)}px`;
+    wrap.appendChild(d); setTimeout(() => d.remove(), 600);
+  }
+}
+function dmgNumber(n){
+  const r = document.getElementById('dummy').getBoundingClientRect();
+  const w = wrap.getBoundingClientRect();
+  const d = document.createElement('div');
+  d.className = 'dmg'; d.textContent = '-' + n;
+  d.style.left = (r.left - w.left + r.width*0.3) + 'px';
+  d.style.top  = (r.top - w.top + r.height*0.25) + 'px';
+  wrap.appendChild(d); setTimeout(() => d.remove(), 1050);
+}
+
+function playOnce(){
+  stage.classList.remove('anim');
+  document.getElementById('dummy').classList.remove('hit');
+  stage.style.setProperty('--dur', (DUR/speed) + 'ms');
+  ghost();
+  void stage.offsetWidth;                 // 強制 reflow，令動畫可以重播
+  stage.classList.add('anim');
+  const t0 = performance.now();
+  const step = () => {
+    const p = (performance.now() - t0) / (DUR/speed);
+    if (p <= 1){ sayPhase(Math.min(p,1)); timer = requestAnimationFrame(step); }
+    else { sayPhase(1); if (looping) setTimeout(playOnce, 260); }
+  };
+  step();
+  setTimeout(flash, (DUR/speed)*0.33);                       // 衝擊幀
+  setTimeout(() => { particles(); dmgNumber(14); document.getElementById('dummy').classList.add('hit'); },
+             (DUR/speed)*0.34);
+}
+function ghost(){
+  const g = document.getElementById('pArmGhost');
+  if (!g.classList) return;
+  g.style.display = ghostOn ? 'block' : 'none';
+  g.style.animation = ghostOn ? `armThrust ${(DUR/speed)}ms cubic-bezier(.3,.7,.2,1) ${(DUR/speed)*0.06}ms both` : 'none';
+}
+
+document.getElementById('btnPlay').onclick = () => { looping = false; setLoopBtn(); playOnce(); };
+document.getElementById('btnLoop').onclick = () => { looping = !looping; setLoopBtn(); if (looping) playOnce(); };
+document.getElementById('btnJoints').onclick = (e) => {
+  const j = document.getElementById('joints');
+  j.classList.toggle('on'); e.target.classList.toggle('on', j.classList.contains('on'));
+};
+document.getElementById('btnGhost').onclick = (e) => {
+  ghostOn = !ghostOn; e.target.classList.toggle('on', ghostOn); ghost();
+};
+document.getElementById('btnSlow').onclick = (e) => {
+  speed = speed === 1 ? 0.5 : (speed === 0.5 ? 1.5 : 1);
+  e.target.textContent = '速度 ' + speed.toFixed(1) + '×';
+};
+function setLoopBtn(){ document.getElementById('btnLoop').classList.toggle('on', looping); }
+</script>
+</body>
+</html>
