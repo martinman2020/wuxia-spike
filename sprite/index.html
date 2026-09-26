@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spike 006 — 逐格連續動作（sprite sheet）</title>
+<style>
+  :root { --ink:#231f1c; --paper:#f4f1e8; --line:#c9c2b6; --accent:#7a2f2f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:ui-serif,"Noto Serif TC",serif; font-size:15px; }
+  #app { max-width:820px; margin:0 auto; padding:16px 14px 50px; }
+  h1 { font-size:17px; margin:0 0 4px; }
+  .sub { font-size:12px; color:#7c7469; margin-bottom:12px; }
+  .panel { border:1px solid var(--line); background:#fffefb; padding:10px 12px; margin-bottom:10px; }
+  .bar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .bar button { font:inherit; font-size:13px; padding:5px 11px; border:1px solid var(--ink); background:#fffefb; cursor:pointer; }
+  .bar button.on { background:var(--ink); color:#fffefb; }
+  select { font:inherit; font-size:13px; padding:4px 6px; border:1px solid var(--ink); background:#fffefb; }
+  #view { position:relative; width:100%; height:58vh; min-height:300px; overflow:hidden; border:1px solid var(--line);
+    background:radial-gradient(120% 90% at 55% 35%, #fffdf8 0%, #eee9dd 70%, #ded7c8 100%); }
+  #view img { position:absolute; left:50%; top:50%; transform-origin:center; image-rendering:auto; }
+  #ghost { opacity:.22; filter:grayscale(1); }
+  #hud { position:absolute; left:8px; bottom:6px; font-size:12px; color:#6d6559; }
+  table.k { border-collapse:collapse; font-size:12.5px; width:100%; }
+  table.k td, table.k th { border:1px solid var(--line); padding:3px 6px; text-align:left; }
+  code { font-size:12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>逐格連續動作（sprite sheet）— Spike 006</h1>
+  <div class="sub">做法：AI 喺**同一張圖**畫連續多格 → 自動切格 → 標準化（統一身高／對齊地平線／對齊身體重心）→ 逐格播放，唔會拆散身體部件</div>
+
+  <div class="panel bar">
+    <button id="btnPlay">▶ 播放</button>
+    <button id="btnLoop" class="on">循環</button>
+    <button id="btnOnion">殘影對照</button>
+    <label>動作 <select id="selAnim"></select></label>
+    <label>速度 <select id="selFps">
+      <option value="6">6 fps（慢動作）</option>
+      <option value="10" selected>10 fps</option>
+      <option value="15">15 fps</option>
+      <option value="24">24 fps</option>
+    </select></label>
+    <button id="btnStepBack">◀ 上一格</button>
+    <button id="btnStepFwd">下一格 ▶</button>
+  </div>
+
+  <div id="view">
+    <img id="ghost" alt="">
+    <img id="frame" alt="">
+    <div id="hud"></div>
+  </div>
+
+  <div class="panel">
+    <table class="k">
+      <tr><th>項目</th><th>數值</th></tr>
+      <tr><td>來源</td><td>AI 單張圖內嘅連續格（2×3 格陣）</td></tr>
+      <tr><td>標準化</td><td>地平線對齊（差 0px）＋身體重心 x 對齊（差 0.8px）</td></tr>
+      <tr><td>對比骨架版</td><td>逐格版**冇部件接縫**；骨架版動作幅度大但關節係硬切</td></tr>
+    </table>
+    <div class="sub" id="stat" style="margin:8px 0 0"></div>
+  </div>
+</div>
+
+<script>
+const ANIMS = {
+  'sheet6': { label: '連續 6 格（AI 出嘅動作序列）', dir: './assets/sheet6/norm', n: 6 },
+  'sheet4': { label: '連續 4 格（另一張）', dir: './assets/sheet4/norm', n: 4 },
+};
+let cur = 'sheet6', idx = 0, playing = false, loop = true, onion = false, fps = 10, timer = null;
+const frameEl = document.getElementById('frame'), ghostEl = document.getElementById('ghost');
+
+function load(){
+  const a = ANIMS[cur];
+  frameEl.src = a.dir + '/f' + idx + '.webp';
+  ghostEl.src = a.dir + '/f' + ((idx - 1 + a.n) % a.n) + '.webp';
+  ghostEl.style.display = onion ? 'block' : 'none';
+  fit();
+  document.getElementById('hud').textContent = a.label + '｜第 ' + (idx+1) + '/' + a.n + ' 格｜' + fps + ' fps';
+}
+function fit(){
+  const v = document.getElementById('view');
+  const s = Math.min(v.clientWidth*0.9/600, v.clientHeight*0.94/300);
+  for (const el of [frameEl, ghostEl]){
+    el.style.width = (600*s) + 'px';
+    el.style.marginLeft = (-600*s/2) + 'px';
+    el.style.marginTop = (-300*s/2) + 'px';
+  }
+}
+function tick(){
+  idx = (idx + 1) % ANIMS[cur].n;
+  load();
+  if (idx === 0 && !loop){ playing = false; setPlayBtn(); return; }
+}
+function play(){ if (playing) return; playing = true; setPlayBtn(); timer = setInterval(tick, 1000/fps); }
+function stop(){ playing = false; clearInterval(timer); setPlayBtn(); }
+function setPlayBtn(){ document.getElementById('btnPlay').classList.toggle('on', playing); }
+
+document.getElementById('btnPlay').onclick = () => playing ? stop() : play();
+document.getElementById('btnLoop').onclick = (e) => { loop = !loop; e.target.classList.toggle('on', loop); };
+document.getElementById('btnOnion').onclick = (e) => { onion = !onion; e.target.classList.toggle('on', onion); load(); };
+document.getElementById('btnStepFwd').onclick = () => { stop(); idx = (idx+1) % ANIMS[cur].n; load(); };
+document.getElementById('btnStepBack').onclick = () => { stop(); idx = (idx-1+ANIMS[cur].n) % ANIMS[cur].n; load(); };
+document.getElementById('selFps').onchange = (e) => {
+  fps = +e.target.value;
+  if (playing){ clearInterval(timer); timer = setInterval(tick, 1000/fps); }
+  load();
+};
+const sel = document.getElementById('selAnim');
+for (const k in ANIMS){
+  const o = document.createElement('option'); o.value = k; o.textContent = ANIMS[k].label; sel.appendChild(o);
+}
+sel.onchange = (e) => { stop(); cur = e.target.value; idx = 0; load(); };
+document.getElementById('stat').textContent =
+  '提示：開「殘影對照」可以睇到上一格嘅位置（灰），判斷兩格之間有冇跳位。用「上一格／下一格」逐格睇最清楚。';
+window.addEventListener('resize', fit);
+load();
+</script>
+</body>
+</html>
