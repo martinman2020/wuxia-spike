@@ -71,6 +71,26 @@
     animation:vignette .5s ease-out forwards; }
   @keyframes blockPulse { 0%{background:#eef3ee} 100%{background:#fffefb} }
   .blocked { animation:blockPulse .5s ease-out; }
+  /* ── 演出型打擊（技能 cut-in / 鏡頭 / 衝擊幀 / 粒子）── */
+  #app { transition:transform .18s ease-out; }
+  #app.camerapush { transform:scale(1.05) translateY(7px); }
+  @keyframes flashOut { 0%{opacity:.9} 100%{opacity:0} }
+  .fx-flash { position:fixed; inset:0; z-index:78; background:#fffefb; pointer-events:none;
+    animation:flashOut .19s steps(2, end) forwards; }
+  @keyframes cutinIn { 0%{opacity:0} 12%{opacity:1} 72%{opacity:1} 100%{opacity:0} }
+  .cutin { position:fixed; inset:0; z-index:80; pointer-events:none; background:rgba(18,15,12,.62);
+    display:flex; align-items:center; justify-content:center; animation:cutinIn .62s ease-out forwards; }
+  @keyframes artPush { 0%{transform:translateX(-16%) scale(.9)} 22%{transform:translateX(0) scale(1)} 100%{transform:translateX(7%) scale(1.07)} }
+  .cutin img { max-height:60vh; max-width:76vw; animation:artPush .62s ease-out forwards;
+    filter:drop-shadow(0 8px 22px rgba(0,0,0,.55)); }
+  .cutin .cutin-name { position:absolute; bottom:11%; font-size:30px; letter-spacing:8px; color:#fffefb;
+    text-shadow:0 2px 12px #000, 0 0 3px #000; font-weight:700; }
+  @keyframes inkFly { 0%{opacity:1;transform:translate(0,0) scale(1)} 100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.4)} }
+  .ink-p { position:fixed; z-index:72; pointer-events:none; border-radius:50%; background:#1b1917;
+    animation:inkFly .52s ease-out forwards; }
+  .fx-enemy-hit { filter:brightness(1.45) contrast(1.15); }
+  .fx-enemy-move { transform:translateY(5px) scale(.985); transition:transform .12s ease-out; }
+  .fx-heal-glow { box-shadow:0 0 0 2px rgba(63,107,70,.45) inset; }
 </style>
 </head>
 <body>
@@ -196,7 +216,7 @@ function playCard(i){
   const gainedBlock = S.block - blockBefore;
   const healed = S.hp - myHpBefore;
   setTimeout(() => {
-    if (dealt > 0){ fxSlash(); fxShake(document.getElementById('enemy')); fxNum('-' + dealt, '#7a2f2f', true); }
+    if (dealt > 0){ fxImpact(id, card.name, dealt); }
     if (gainedBlock > 0) fxNum('+' + gainedBlock + ' 護體', '#3f6b46', false);
     if (healed > 0) fxNum('+' + healed, '#3f6b46', false);
   }, 130);
@@ -294,9 +314,13 @@ function renderStyleBar(){
   }
   const n = document.createElement('span');
   n.className = 'note';
-  n.textContent = artFull() ? '（水墨：正式牌圖 + 敵人圖 + 背景 + 打擊動畫）'
+  n.textContent = artFull() ? '（水墨：正式牌圖 + 敵人圖 + 背景 + 打擊演出）'
                             : (artOn() ? '（測試用：單張圖裁切，未有正式牌圖）' : '（切換睇下邊種風格順眼）');
   bar.appendChild(n);
+  const ab = document.createElement('button');
+  ab.textContent = '演出：' + (animFull ? '全開' : '精簡');
+  ab.onclick = () => { animFull = !animFull; saveAnim(); render(); };
+  bar.appendChild(ab);
 }
 function applyArt(){
   if (document.body) document.body.className = artOn() ? 'art' + artStyle : '';
@@ -349,6 +373,54 @@ function fxShake(el){
 function fxVignette(){
   if (!fxReady()) return;
   fxTemp('fx-vig', {}, 520);
+}
+
+// ── 演出型打擊：衝擊幀 → 技能 cut-in → 鏡頭推 → 粒子 → 傷害數字 ──
+let fxBusy = false;
+let animFull = true;
+try { animFull = (localStorage.getItem('wuxia_anim') || 'full') === 'full'; } catch(e){}
+function saveAnim(){ try { localStorage.setItem('wuxia_anim', animFull ? 'full' : 'light'); } catch(e){} }
+function fxFlash(){ if (!fxReady()) return; fxTemp('fx-flash', {}, 220); }
+function fxCamera(on){
+  const app = document.getElementById('app');
+  if (!fxReady() || !app || !app.classList) return;
+  if (on) app.classList.add('camerapush'); else app.classList.remove('camerapush');
+}
+function fxCutin(id, name){
+  if (!fxReady()) return;
+  const d = document.createElement('div');
+  d.className = 'cutin';
+  d.innerHTML = `<img src="${cardArtURL(id)}" alt=""><div class="cutin-name">${name}</div>`;
+  document.body.appendChild(d);
+  setTimeout(() => { if (d.remove) d.remove(); }, 660);
+}
+function fxParticles(){
+  if (!fxReady()) return;
+  const r = document.getElementById('enemy').getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  for (let i = 0; i < 12; i++){
+    const a = Math.random() * Math.PI * 2, dist = 40 + Math.random() * 70, s = 5 + Math.random() * 9;
+    fxTemp('ink-p', { left:(cx-6)+'px', top:(cy-6)+'px', width:s+'px', height:s+'px',
+      '--dx':(Math.cos(a)*dist).toFixed(0)+'px', '--dy':(Math.sin(a)*dist).toFixed(0)+'px' }, 560);
+  }
+}
+function fxEnemyHit(){
+  const el = document.getElementById('enemy');
+  if (!fxReady() || !el || !el.classList) return;
+  el.classList.add('fx-enemy-hit', 'fx-enemy-move');
+  setTimeout(() => el.classList.remove('fx-enemy-hit', 'fx-enemy-move'), 260);
+}
+function fxImpact(id, name, dealt){
+  if (!fxReady()) return;
+  if (fxBusy){ fxNum('-' + dealt, '#7a2f2f', true); return; }
+  fxBusy = true;
+  fxFlash();                                  // 衝擊幀（白閃 2 格）
+  if (animFull){
+    fxCamera(true);                           // 鏡頭推近
+    fxCutin(id, name);                        // 技能演出插畫
+  }
+  setTimeout(() => { fxParticles(); fxEnemyHit(); fxNum('-' + dealt, '#7a2f2f', true); }, 140);
+  setTimeout(() => { fxCamera(false); fxBusy = false; }, animFull ? 620 : 300);
 }
 
 // ── 畫面 ──
