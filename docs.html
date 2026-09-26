@@ -235,18 +235,48 @@
 <tr><td>敵人（3）</td><td><code>enemy-shanzei</code> <code>enemy-biaoshi</code> <code>enemy-zhangmen</code></td><td>420×420</td><td>14.0–22.0 KB</td></tr>
 </table>
 
-<p><b>打擊動畫（全部純 CSS/JS，無影片檔）</b></p>
+<p><b>打擊演出（純 CSS/JS，無影片檔；頂部「演出」按鈕可切全開／精簡）</b></p>
 
 <table>
-<tr><th>動作</th><th>效果</th></tr>
-<tr><td>出牌</td><td>卡牌「影子」由手牌位置飛向敵人面板（<code>fx-ghost</code>）</td></tr>
-<tr><td>造成傷害</td><td>斜向斬擊光帶掃過敵人面板（<code>fx-slash</code>）+ 面板左右震動（<code>shake</code>）+ 傷害數字飄升（<code>fx-num</code>）</td></tr>
-<tr><td>得護體／回血</td><td>綠色數字飄升（面板顯示）</td></tr>
-<tr><td>敵人攻擊</td><td>全屏紅色暗角閃（<code>fx-vig</code>）+ 玩家面板震動 + 有擋格時面板綠閃（<code>blocked</code>）</td></tr>
-<tr><td>背景</td><td>水墨山水做固定背景層（<code>#bgLayer</code>，opacity .55），UI 面板保持不透明以免影響文字可讀性</td></tr>
+<tr><th>階段</th><th>效果</th><th>代碼</th></tr>
+<tr><td>1</td><td>白閃衝擊幀（2 格）</td><td><code>fxFlash</code></td></tr>
+<tr><td>2</td><td>技能 cut-in：全屏該招插畫從左推入 + 卡名毛筆大字 + 暗底</td><td><code>fxCutin</code></td></tr>
+<tr><td>3</td><td>鏡頭推近（整個 UI scale 1.05 + 下移）</td><td><code>fxCamera</code></td></tr>
+<tr><td>4</td><td>墨點粒子飛散（12 粒隨機方向）</td><td><code>fxParticles</code></td></tr>
+<tr><td>5</td><td>敵人面板變亮 + 下移 + 傷害數字飄升</td><td><code>fxEnemyHit</code>／<code>fxNum</code></td></tr>
+<tr><td>6</td><td>鏡頭復位（約 620ms 後）</td><td><code>fxImpact</code> 收尾</td></tr>
+<tr><td>敵人攻擊</td><td>全屏紅色暗角閃 + 你嘅面板震動 + 擋格綠閃</td><td><code>fxVignette</code>／<code>fxShake</code></td></tr>
 </table>
 
-<p><b>限制</b>：木刻／平面兩個風格仲未有正式牌圖；想升級任何一個風格，照 <code>build-assets.py</code> 嘅形式生成 13 張圖改個名放落 <code>art/&lt;風格&gt;/</code> 就得。</p>
+<p>「精簡」模式會跳過 cut-in 同鏡頭推（手機性能敏感時用）。</p>
+
+<p><b>背景</b>：水墨山水做固定背景層（<code>#bgLayer</code>，opacity .55），UI 面板保持不透明以免影響文字可讀性。</p>
+
+<hr>
+
+<h2>13. 逐格角色動畫可行性（實測結論：一人+AI 唔可行）</h2>
+
+<p>2026-09-25 做過一次實測：用 image-to-image（以第 1 格做參考圖）生成同一角色「直刺」嘅後續兩格，再用視覺分析逐格對比。</p>
+
+<p><b>結果：角色一致性唔成立。</b></p>
+
+<table>
+<tr><th>項目</th><th>第 1 格</th><th>第 2 格</th><th>第 3 格</th></tr>
+<tr><td>握劍方式</td><td>雙手豎持（劍尖向上）</td><td>單手水平前伸</td><td>低蹲、劍橫於身前</td></tr>
+<tr><td>服裝細節</td><td>無腿綁</td><td>無腿綁</td><td><b>多了綁腿同草鞋</b></td></tr>
+<tr><td>畫面元素</td><td>有紅印章</td><td>無印章</td><td>無印章</td></tr>
+<tr><td>鏡頭／比例</td><td>低角度、直立</td><td>水平線構圖</td><td>全身、蹲低</td></tr>
+</table>
+
+<p>即係 AI 生成嘅「下一格」會漂移成另一個角色（連服裝都會加減），用嚟做 6–12 格攻擊動畫會變成角色閃爍。<b>結論：唔可以靠 AI 圖生圖做 sprite frame animation。</b></p>
+
+<p><b>真正可行嘅三條路（成本由低到高）</b></p>
+
+<p>1. <b>演出型打擊（已做）</b> —— cut-in + 衝擊幀 + 鏡頭 + 粒子。一人 2D 遊戲嘅標準做法，可以拿到大部分「打擊感」，成本係幾百行 CSS/JS。</p>
+<p>2. <b>骨骼／部件動畫（Spine、DragonBones、Godot Skeleton2D）</b> —— 需要把角色拆成部件圖層（頭／軀幹／上臂／前臂／劍）＋手動綁定＋逐招 K 動畫。呢個才係《卡厄思夢境》式「角色真係做出動作」嘅路，但係<b>每角色以星期計</b>嘅手工藝，AI 只能幫出部件圖，綁定同 K 幀係人手做。</p>
+<p>3. <b>影片生成（image-to-video）</b> —— 可以出短片，但要處理幀對齊、透明背景、檔案大小同迴圈，風險高，未測。</p>
+
+<p><b>現實對比</b>：《卡厄思夢境》係 Smilegate 旗下 SUPER CREATIVE 團隊 + 騰訊發行，動畫演出有專門人手。一人專案要做到同等級，成本唔係「加個濾鏡」，係「請一個動畫師做幾個月」。所以一人專案嘅合理目標係第 1 條路做到極致（演出節奏、hit-stop、殘像），而唔係追平。</p>
 
 <p><b>注意</b>：美術對第 8 節嘅數據結論<b>冇影響</b> —— 亂按仍然係最高勝率策略之一。美術唔會令遊戲變得有決策。</p>
 </main></body></html>
