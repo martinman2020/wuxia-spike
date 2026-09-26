@@ -96,20 +96,20 @@
         <!-- 敵人（假人） -->
         <img class="dummy" id="dummy" src="../art/A/enemy-shanzei.webp" alt=""
              style="left:258px; top:300px; width:200px; opacity:.88; filter:grayscale(.25)">
-        <!-- 骨架部件（left/top = 原圖座標，樞軸寫在 --ox/--oy） -->
-        <img class="p-legs"  id="pLegs"  src="./assets/parts/legs.webp"  alt="" style="left:0px;   top:383px;">
+        <!-- 骨架部件（left/top = 原圖座標，樞軸 = --ox/--oy；z 序由低到高：腿→臂→軀幹→頭） -->
+        <img class="p-legs"  id="pLegs"  src="./assets/parts/legs.webp"  alt="" style="left:0px;   top:348px; z-index:1;">
         <img class="ghostArm" id="pArmGhost" src="./assets/parts/arm_front.webp" alt=""
-             style="left:158px; top:0px; --ox:28px; --oy:172px; z-index:2; display:none;">
+             style="left:213px; top:0px; --ox:3px; --oy:176px; z-index:2; display:none;">
         <img class="p-arm"   id="pArm"   src="./assets/parts/arm_front.webp" alt=""
-             style="left:158px; top:0px; --ox:28px; --oy:172px; z-index:4;">
+             style="left:213px; top:0px; --ox:3px; --oy:176px; z-index:2;">
         <img class="p-torso" id="pTorso" src="./assets/parts/torso.webp" alt=""
-             style="left:0px; top:136px; --ox:112px; --oy:261px; z-index:5;">
+             style="left:0px; top:149px; --ox:112px; --oy:199px; z-index:3;">
         <img class="p-head"  id="pHead"  src="./assets/parts/head.webp"  alt=""
-             style="left:0px; top:0px;   --ox:135px; --oy:137px; z-index:6;">
+             style="left:0px; top:0px;   --ox:135px; --oy:137px; z-index:4;">
         <div id="joints">
           <div class="joint" style="left:135px; top:137px;"></div><!-- 頸 -->
-          <div class="joint" style="left:112px; top:397px;"></div><!-- 腰 -->
-          <div class="joint" style="left:186px; top:172px;"></div><!-- 肩 -->
+          <div class="joint" style="left:112px; top:348px;"></div><!-- 腰 -->
+          <div class="joint" style="left:216px; top:176px;"></div><!-- 肩 -->
         </div>
       </div>
     </div>
@@ -124,8 +124,8 @@
     <table class="k">
       <tr><th>部件</th><th>樞軸</th><th>動作</th></tr>
       <tr><td>head</td><td>頸 (135,137)</td><td>−4° → +3°（隨身體轉）</td></tr>
-      <tr><td>torso</td><td>腰 (112,397)</td><td>−5° → +7°（前壓）</td></tr>
-      <tr><td>arm_front</td><td>肩 (186,172)</td><td>−27° → +15°（收 → 刺）</td></tr>
+      <tr><td>torso</td><td>腰 (112,348)</td><td>−5° → +7°（前壓）</td></tr>
+      <tr><td>arm_front</td><td>肩 (216,176)</td><td>−27° → +15°（收 → 刺），壓在軀幹之下</td></tr>
       <tr><td>legs</td><td>—（根）</td><td>整個舞台向前撲 30px</td></tr>
     </table>
   </div>
