@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>武學對招 v2 — 機制與數值文檔</title>
+<style>
+ body{margin:0;background:#f6f4ef;color:#2b2b2b;font-family:ui-serif,"Noto Serif TC","Songti TC",serif;font-size:15px;line-height:1.65}
+ main{max-width:900px;margin:0 auto;padding:18px 15px 70px}
+ h1{font-size:19px;letter-spacing:1px;border-bottom:2px solid #2b579a;padding-bottom:6px}
+ h2{font-size:16px;color:#2b579a;margin-top:26px;border-bottom:1px solid #c9c2b6;padding-bottom:4px}
+ h3{font-size:14.5px;margin-top:18px}
+ p{margin:7px 0}
+ code{background:#efece5;padding:1px 4px;border-radius:3px;font-size:13px}
+ table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13px;display:block;overflow-x:auto;white-space:nowrap}
+ th,td{border:1px solid #c9c2b6;padding:5px 7px;text-align:left}
+ th{background:#efece5}
+ blockquote{border-left:3px solid #2b579a;margin:8px 0;padding:4px 10px;color:#5f584e;background:#fffefb}
+ li{margin:3px 0}
+ hr{border:0;border-top:1px solid #c9c2b6;margin:20px 0}
+ .top{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+ .top a{font-size:13px;color:#2b579a;text-decoration:none;border:1px solid #2b579a;padding:4px 10px;border-radius:3px}
+</style></head><body><main>
+<div class="top"><a href="./">← 返去玩 v2</a></div>
+<h1>武學對招 v2 — 機制與數值文檔</h1>
+
+<blockquote>線上版：https://martinman2020.github.io/wuxia-spike/</blockquote>
+<blockquote>本機版：<code>spikes/001-core-loop/index.html</code>（單一檔案，零 build）</blockquote>
+<blockquote>驗證工具：<code>node spikes/001-core-loop/sim-check.mjs</code>（headless 模擬，5 種 AI 策略各 400 局）</blockquote>
+<blockquote>文檔狀態：2026-09-25，對應 v2 最終版（亂按勝率 18.3%）</blockquote>
+
+<hr>
+
+<h2>1. 一局嘅結構</h2>
+
+<table>
+<tr><th>項目</th><th>數值</th></tr>
+<tr><td>敵人關數</td><td>3（山賊 → 鏢師 → 掌門）</td></tr>
+<tr><td>玩家生命</td><td>60（每關之間自動回 5，最多唔超過上限）</td></tr>
+<tr><td>勝利</td><td>打完第三關</td></tr>
+<tr><td>失敗</td><td>生命歸零，任一關都可以死</td></tr>
+<tr><td>跨局記憶</td><td>「江湖記憶」存在瀏覽器 localStorage（key <code>wuxia_spike_001_stats_v2</code>）</td></tr>
+</table>
+
+<hr>
+
+<h2>2. 回合流程（順序好重要）</h2>
+
+<p><b>你嘅回合開始</b></p>
+<p>1. 護體歸零（上回合未用完嘅護體<b>唔會</b>保留）</p>
+<p>2. 氣力重置為 3</p>
+<p>3. 抽 7 張（手牌上限 10，超過就唔再抽）</p>
+<p>4. 出牌（自由順序，只要氣夠）</p>
+
+<p><b>結束回合（空白鍵 / 按鈕）</b></p>
+<p>5. 手上剩餘牌全部入棄牌堆</p>
+<p>6. 敵人先受流血傷害（如果有），然後流血值<b>減半（向下取整）</b></p>
+<p>7. 敵人攻擊：<b>逐次結算</b>（見第 8 節連擊）</p>
+<p>8. 未死亡 → 回到步驟 1</p>
+
+<p><b>抽牌堆耗盡</b>：棄牌堆洗牌後變回抽牌堆。</p>
+
+<hr>
+
+<h2>3. 招式表（v2 全部 9 種，牌組共 12 張）</h2>
+
+<p>傷害欄位係實測計算值（<code>破招</code> 先結算，<code>變招 +25%</code> 後結算）：</p>
+
+<table>
+<tr><th>招式</th><th>類型</th><th>氣</th><th>效果</th><th>基礎</th><th>變招+25%</th><th>被破招−30%</th><th>兩者同時</th></tr>
+<tr><td>直刺</td><td>劍</td><td>1</td><td>造成 8 點傷害</td><td>8</td><td>10</td><td>6</td><td>8</td></tr>
+<tr><td>橫掃</td><td>劍</td><td>1</td><td>5 點傷害 + 敵人流血 4</td><td>5</td><td>6</td><td>4</td><td>5</td></tr>
+<tr><td>連環腿</td><td>腿</td><td>1</td><td>5 點傷害 × 2 次</td><td>5×2=10</td><td>6×2=12</td><td>4×2=8</td><td>5×2=10</td></tr>
+<tr><td>點穴</td><td>腿</td><td>1</td><td>7 點傷害 + 敵人軟弱 1 回合</td><td>7</td><td>9</td><td>5</td><td>6</td></tr>
+<tr><td>破勢</td><td>掌</td><td>2</td><td>18 點傷害，<b>自身受 5 點傷害</b></td><td>18</td><td>23</td><td>13</td><td>16</td></tr>
+<tr><td>推手</td><td>掌</td><td>1</td><td>獲得 6 點護體</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>吐納</td><td>內功</td><td>0</td><td>抽 1 張牌</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>養氣</td><td>內功</td><td>1</td><td>獲得 1 點氣，抽 1 張牌</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>運氣療傷</td><td>內功</td><td>1</td><td>護體 4 + 回復 3 點生命</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</table>
+
+<p><b>起始牌組（12 張）</b>：直刺 ×3、推手 ×2、吐納 ×1、連環腿 ×1、點穴 ×1、運氣療傷 ×1、破勢 ×1、橫掃 ×1、養氣 ×1</p>
+
+<p><b>結構觀察</b>：全牌組總費用 12 ÷ 12 張 = <b>平均 1.00 氣</b>。每回合有 3 氣、抽 7 張 → 你幾乎總係「出得好多張」。</p>
+
+<h3>招式類型（4 類）</h3>
+<li><b>劍</b>：直刺、橫掃</li><li><b>腿</b>：連環腿、點穴</li><li><b>掌</b>：破勢、推手</li><li><b>內功</b>：吐納、養氣、運氣療傷</li>
+
+<p>類型<b>唯一</b>嘅作用就係同「江湖記憶／破招」同「變招」互動 —— 類型本身冇相剋、冇屬性加成。</p>
+
+<hr>
+
+<h2>4. 江湖記憶／破招（跨局機制，本作原創 hook）</h2>
+
+<li>每局結束時，系統統計你<b>用得最多嘅招式類型</b>，存為 <code>ban</code></li><li>下一局開始，該類型全部招式<b>傷害 ×0.7</b>（向下取整，最少 1 點）</li><li>UI 會標示：卡牌變紅框、卡面寫「被破招 −30%」、頂欄顯示「江湖記憶：X類 −30%」</li><li>只影響<b>傷害</b>，唔影響護體、抽牌、回血</li><li>未玩過嘅新玩家（冇記錄）唔會被破招</li>
+
+<p><b>注意</b>：破招係按「類型」而非單張牌 —— 即係你若果上局狂用劍法，本局直刺同橫掃一齊被削。實際效果：直刺 8→6、橫掃 5→4、連環腿 5→4（每段）。</p>
+
+<hr>
+
+<h2>5. 變招（本回合機制）</h2>
+
+<li>本回合內，只要你<b>用過 2 種或以上唔同類型</b>嘅招式，該回合所有後續傷害 <b>×1.25</b></li><li>每回合開始清零</li><li>UI 會顯示「變招：本回合已用【劍・掌】 傷害 +25%」</li><li>對多段傷害牌（連環腿）每段都受惠 → 連環腿係最大受益者（10→12）</li>
+
+<hr>
+
+<h2>6. 狀態效果</h2>
+
+<table>
+<tr><th>狀態</th><th>對象</th><th>效果</th></tr>
+<tr><td>流血</td><td>敵人</td><td>敵人回合開始先受 N 點傷害（<b>無視護體</b>），然後流血值減半（向下取整）</td></tr>
+<tr><td>軟弱</td><td>敵人</td><td>敵人攻擊 ×0.75，持續 1 回合（敵人蓄勢嗰回合唔會遞減）</td></tr>
+<tr><td>蓄勢</td><td>敵人</td><td>下一擊<b>每段</b>傷害 ×2（掌門專用）</td></tr>
+<tr><td>護體</td><td>玩家</td><td>吸收傷害；<b>每段攻擊逐次扣除</b>；回合開始全部歸零</td></tr>
+</table>
+
+<p><b>護體 vs 連擊（重要）</b>：因為護體逐段扣，一張推手（6 護體）面對 2×7 只能擋到 6 點：</p>
+
+<table>
+<tr><th>你嘅護體</th><th>面對 2×7 實際扣血</th><th>（同樣總量 14 若係單擊就扣）</th></tr>
+<tr><td>0</td><td>14</td><td>14</td></tr>
+<tr><td>4</td><td>10</td><td>10</td></tr>
+<tr><td>6</td><td>8</td><td>8</td></tr>
+<tr><td>12</td><td>2</td><td>2</td></tr>
+</table>
+
+<p>※ 注意：目前連擊設計<b>冇</b>額外懲罰，因為每段傷害細、護體逐段扣嘅結果同單擊一樣。要令連擊有意義，需改成「每段獨立觸發某效果」或「護體唔能跨段沿用」。</p>
+
+<hr>
+
+<h2>7. 敵人表</h2>
+
+<table>
+<tr><th>敵人</th><th>生命</th><th>每回合攻擊</th><th>意圖顯示</th><th>行為</th></tr>
+<tr><td>山賊</td><td>44</td><td>2 × 7（共 14）</td><td>顯示連擊數同每段傷害</td><td>完全固定，冇變化</td></tr>
+<tr><td>鏢師</td><td>56</td><td>2 × 8（共 16）</td><td>同上</td><td>完全固定，冇變化</td></tr>
+<tr><td>掌門</td><td>68</td><td>2 × 10（共 20）</td><td>同上</td><td>血量 &gt; 一半時，每回合 50% 機率蓄勢；蓄勢後下一擊每段 ×2（共 40）</td></tr>
+</table>
+
+<p><b>敵人總傷害壓力</b>：正常回合 14 / 16 / 20；蓄勢回合 <b>40</b>。</p>
+
+<hr>
+
+<h2>8. 目前「打法」實況（由 sim 量化，唔係感覺）</h2>
+
+<p>用 5 種 AI 策略各 400 局跑出嚟：</p>
+
+<table>
+<tr><th>策略</th><th>勝率</th><th>平均出招/局</th><th>說明</th></tr>
+<tr><td>亂按（random 出隨機可出牌）</td><td><b>18.3%</b></td><td>26.3</td><td>亂按都仍然係最高分之一</td></tr>
+<tr><td>純打傷害（greedy，完全唔用防禦牌）</td><td>8.0%</td><td>15.2</td><td><b>必死</b>：護體係必需品</td></tr>
+<tr><td>避開被破招類型</td><td>15.0%</td><td>18.9</td><td>並無優勢 → 破招無牙</td></tr>
+<tr><td>優先混類型（為咗變招）</td><td>10.3%</td><td>17.7</td><td>並無優勢 → 變招係裝飾</td></tr>
+<tr><td>「合理玩家」（算連擊、血量、先補護體）</td><td>9.3%</td><td>19.5</td><td><b>輸 random</b></td></tr>
+</table>
+
+<h3>呢組數據講咩</h3>
+
+<p>1. <b>「出齊所有出得到嘅牌」係最優解</b>，而唔係任何策略思考。原因：牌組冇廢牌、平均費用 1.00、每回合 3 氣抽 7 張 → 冇「揀唔出」嘅壓力。出招多嘅策略（26 張/局）反而贏。</p>
+<p>2. <b>防禦牌係必需品</b>（純輸出策略 8%，明顯最低）→ 呢個係目前唯一真實嘅取捨，但佢唔需要思考：見到敵人意圖數字就出推手。</p>
+<p>3. <b>破招同變招兩個特色機制，數據上冇影響力</b>。避開破招（15.0%）同為變招混類型（10.3%）都唔會贏過亂按（18.3%）。</p>
+
+<h3>現有真／假組合（研究用）</h3>
+
+<table>
+<tr><th>組合</th><th>計算</th><th>評價</th></tr>
+<tr><td>連環腿 + 變招</td><td>6×2 = 12（基礎 10）</td><td>✅ 真受益，因為每段都食加成；費用仍係 1</td></tr>
+<tr><td>破勢 + 變招</td><td>23 傷害（2 氣）</td><td>每點氣 11.5 傷害，係全牌組最高效率；但自傷 5</td></tr>
+<tr><td>點穴 + 任何輸出</td><td>敵人 ×0.75 → 等效每回合省 3.5–5 血</td><td>偏弱（軟弱只 1 回合、只減 25%）</td></tr>
+<tr><td>橫掃流血</td><td>無視護體，且會減半遞減</td><td>總傷害 5 + 4 + 2 + … ≈ 12 但分散；慢速，對 44–68 血敵人可接受</td></tr>
+<tr><td>養氣 + 大量 1 費牌</td><td>每回合 +1 氣 → 由 3 氣變 4 氣</td><td>長期引擎，但食一張牌位</td></tr>
+<tr><td>運氣療傷</td><td>護體 4 + 回 3 = 等效 7 點價值（1 氣）</td><td>效率高，是目前最強防禦牌</td></tr>
+</table>
+
+<hr>
+
+<h2>9. 可調參數（想自己改數值就改呢幾行）</h2>
+
+<table>
+<tr><th>想改嘅嘢</th><th>符號</th><th>index.html 行號</th></tr>
+<tr><td>招式效果／費用／類型</td><td><code>CARDS</code></td><td>56</td></tr>
+<tr><td>起始牌組</td><td><code>START_DECK</code></td><td>67</td></tr>
+<tr><td>敵人生命／段落數／每段傷害</td><td><code>ENEMIES</code></td><td>68</td></tr>
+<tr><td>跨局記憶的 localStorage key（改 key = 清空舊記錄）</td><td><code>KEY</code></td><td>73</td></tr>
+<tr><td>玩家生命上限 / 每回合氣力</td><td><code>S = { hp: …, energyMax: … }</code></td><td>86</td></tr>
+<tr><td>每回合抽牌數</td><td><code>draw(7)</code></td><td>110</td></tr>
+<tr><td>破招減傷幅度</td><td><code>Math.round(dmg*0.7)</code></td><td>130</td></tr>
+<tr><td>變招加成幅度</td><td><code>Math.round(dmg*1.25)</code></td><td>131</td></tr>
+<tr><td>過場回血量</td><td><code>S.hp = Math.min(S.maxHp, S.hp + 5)</code></td><td>180</td></tr>
+</table>
+
+<p>改完之後跑 <code>node sim-check.mjs</code> 就可以即刻睇到 5 種策略嘅勝率變化。</p>
+
+<hr>
+
+<h2>10. 已知問題（研究清單）</h2>
+
+<p>1. <b>冇廢牌、冇構築層</b> → 冇決策。StS 之所以要思考，係起手有廢牌逼你跳，而且真正決策在「戰後加咩牌」。v2 兩樣都冇。</p>
+<p>2. <b>破招無牙</b>：−30% 唔足以補償放棄主力傷害類型嘅損失（實測）。</p>
+<p>3. <b>變招係裝飾</b>：為佢犧牲輸出反而輸（實測）。</p>
+<p>4. <b>難度係雙峰式</b>：改動 ±15% 可以令亂按勝率由 5% 跳到 71%。呢套數值唔可以當長期平衡基礎。</p>
+<p>5. <b>敵人零變化</b>：山賊／鏢師完全固定行為，掌門只有一個 50% 隨機蓄勢 → 冇「應對敵人模式」嘅樂趣。</p>
+<p>6. <b>連擊設計無效</b>：如第 6 節所示，2×7 同單擊 14 對手感／結果一樣（護體逐段扣嘅數學結果相同）。</p>
+
+<hr>
+
+<h2>11. 驗證方式（自己覆核）</h2>
+
+<p><code>`</code></p>
+<p>cd ~/Projects/wuxia-deckbuilder/spikes/001-core-loop</p>
+<p>node sim-check.mjs          # 5 種策略各 400 局，輸出勝率／死亡關卡／出招數</p>
+<p><code>`</code></p>
+
+<p>模擬用 DOM stub 抽出 <code>index.html</code> 內嘅腳本，唔需要瀏覽器。已知盲點：AI 唔會 plan 未來回合、唔會為咗下回合留牌，所以 AI 勝率<b>低估</b>人類玩家嘅實際表現。</p>
+</main></body></html>
