@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spike 001 — 武學對招 core loop (v2)</title>
+<title>Spike 001 — 武學對招 core loop (v2.2 角色演出)</title>
 <style>
   :root { --ink:#2b2b2b; --paper:#f6f4ef; --line:#c9c2b6; --accent:#7a2f2f; }
   * { box-sizing:border-box; }
@@ -157,8 +157,8 @@
 </div>
 <div id="bgLayer"></div>
 <div id="app">
-  <h1>武學對招 — Spike 001 v2</h1>
-  <div class="sub">v2 改動：敵人加強、冇免費資源卡、「江湖記憶」升級為針對整個招式類型 ・ <a href="./docs.html" style="color:#7a2f2f">機制與數值文檔 →</a></div>
+  <h1>武學對招 — Spike 001 v2.2（角色演出）</h1>
+  <div class="sub">build 2026-09-26a ・ 出攻擊牌會觸發全屏角色演出（每回合第一次）｜亦可按「▶ 試演出」即刻睇 ・ <a href="./docs.html" style="color:#7a2f2f">機制與數值文檔 →</a></div>
   <div class="panel" id="styleBar"></div>
   <div id="meta" class="panel"></div>
   <div id="enemy" class="panel enemy"></div>
@@ -382,6 +382,14 @@ function renderStyleBar(){
   ab.textContent = '演出：' + (animFull ? '全開' : '精簡');
   ab.onclick = () => { animFull = !animFull; saveAnim(); render(); };
   bar.appendChild(ab);
+  const tb = document.createElement('button');
+  tb.textContent = '▶ 試演出';
+  tb.onclick = () => {
+    const en = S && S.enemy;
+    const n = en ? Math.max(1, Math.round((en.maxHp || 40) * 0.2)) : 8;
+    fxAttack('zhijian', '直刺', n, true);          // 強制演出，唔理「精簡」設定
+  };
+  bar.appendChild(tb);
 }
 function applyArt(){
   if (document.body) document.body.className = artOn() ? 'art' + artStyle : '';
@@ -442,7 +450,7 @@ const RIG_EXPECT = { head:[195,189], torso:[316,230], arm_front:[252,211], legs:
 
 function loadRig(){
   if (typeof fetch !== 'function' || typeof window === 'undefined' || !document.body) return;    // sim / 無 DOM 環境直接跳過
-  fetch('./art/rig/rig-data.json').then(r => r.json()).then(d => {
+  fetch('./art/rig/rig-data.json?v=2').then(r => r.json()).then(d => {
     rigData = d;
     const stage = d.stage, piv = d.pivot;
     const el = { legs:'srLegs', arm_front:'srArm', torso:'srTorso', head:'srHead' };
@@ -524,11 +532,11 @@ function stageInk(){
 }
 
 // 攻擊卡：一次出招 → 角色演出（每回合只演第一次，之後用輕量版，免得刷手遊咁慢）
-function fxAttack(id, name, dealt){
+function fxAttack(id, name, dealt, force){
   const turn = S ? S.turn : 0;
-  const useStage = dealt > 0 && animFull && rigReady && lastActTurn !== turn;
+  const useStage = dealt > 0 && rigReady && (force || (animFull && lastActTurn !== turn));
   if (!useStage){ if (dealt > 0) fxImpact(id, name, dealt); return; }
-  lastActTurn = turn;
+  if (!force) lastActTurn = turn;
   const wrap = document.getElementById('stageFx'), inner = document.getElementById('stageInner'),
         rig = document.getElementById('stageRig'), enemy = document.getElementById('stageEnemy');
   if (!wrap || !wrap.classList || !inner || !rig){ fxImpact(id, name, dealt); return; }
