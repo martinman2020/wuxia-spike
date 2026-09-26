@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spike 001 — 武學對招 core loop</title>
+<title>Spike 001 — 武學對招 core loop (v2)</title>
 <style>
-  :root { --ink:#2b2b2b; --paper:#f6f4ef; --line:#c9c2b6; --accent:#7a2f2f; --ok:#3f6b46; }
+  :root { --ink:#2b2b2b; --paper:#f6f4ef; --line:#c9c2b6; --accent:#7a2f2f; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--paper); color:var(--ink);
          font-family: ui-serif, "Noto Serif TC", "Songti TC", serif; font-size:15px; }
@@ -25,8 +25,9 @@
   .card:disabled { opacity:.42; cursor:default; }
   .card .cost { float:right; font-size:12px; border:1px solid var(--line); padding:0 5px; }
   .card .cname { font-weight:700; }
+  .card .ctype { font-size:11px; color:#8a8277; }
   .card .ctext { font-size:12px; color:#5f584e; line-height:1.35; margin-top:3px; }
-  .banned { border-color:var(--accent); }
+  .banned { border-color:var(--accent); background:#fbf1ef; }
   button.act { font:inherit; padding:7px 14px; border:1px solid var(--ink); background:#fffefb; cursor:pointer; }
   button.act:hover { background:#efece5; }
   #log { font-size:12.5px; line-height:1.5; max-height:150px; overflow:auto; color:#4b453c; }
@@ -36,8 +37,8 @@
 </head>
 <body>
 <div id="app">
-  <h1>武學對招 — Spike 001</h1>
-  <div class="sub">目標：驗證 (1) 對招迴圈好唔好玩 (2) 「江湖記憶／破招」有冇逼你換套路</div>
+  <h1>武學對招 — Spike 001 v2</h1>
+  <div class="sub">v2 改動：敵人加強、冇免費資源卡、「江湖記憶」升級為針對整個招式類型</div>
   <div id="meta" class="panel"></div>
   <div id="enemy" class="panel enemy"></div>
   <div id="me" class="panel"></div>
@@ -47,54 +48,53 @@
     <button class="act" id="restart">重開一局（R）</button>
   </div>
   <div class="panel" style="margin-top:12px"><div id="log"></div></div>
-  <div class="hint">按 1–9 出招。用完一局之後答自己：仲想開下一局嗎？</div>
+  <div class="hint">按 1–9 出招。重點觀察：亂按會唔會輸、被迫換招時有冇回報。</div>
 </div>
 <script>
-// ── 招式表（spike 用：數值全部 hardcode，唔好追求平衡） ──
+// ── 招式表 ──
+// type：劍 / 掌 / 腿 / 內功 —— 「江湖記憶」以類型為單位破招
 const CARDS = {
-  zhijian:  { name:'直刺',      cost:1, text:'造成 6 點傷害',                     fx:(c)=>{ hurt(c,6); } },
-  hengsao:  { name:'橫掃',      cost:1, text:'造成 4 點傷害，並使敵人流血 3',      fx:(c)=>{ hurt(c,4); c.bleed += 3; } },
-  tuishou:  { name:'推手',      cost:1, text:'獲得 5 點護體',                      fx:()=>{ S.block += 5; } },
-  tuna:     { name:'吐納',      cost:0, text:'抽 2 張牌',                          fx:()=>{ draw(2); } },
-  lianhuan: { name:'連環腿',    cost:1, text:'造成 4 點傷害 2 次',                 fx:(c)=>{ hurt(c,4); hurt(c,4); } },
-  dianxue:  { name:'點穴',      cost:1, text:'造成 6 點傷害，敵人軟弱 1 回合',     fx:(c)=>{ hurt(c,6); c.weak = Math.max(c.weak,1); } },
-  yangqi:   { name:'養氣',      cost:1, text:'獲得 2 點氣',                        fx:()=>{ S.energy += 2; } },
-  yunqi:    { name:'運氣療傷',  cost:1, text:'護體 4，回復 3 點生命',              fx:()=>{ S.block += 4; S.hp = Math.min(S.maxHp, S.hp+3); } },
-  poshi:    { name:'破勢',      cost:2, text:'造成 14 點傷害，自身受 4 點傷害',    fx:(c)=>{ hurt(c,14); S.hp -= 4; log('破勢反噬，自身受 4 點傷害'); } },
+  zhijian:  { name:'直刺',      type:'劍',   cost:1, text:'造成 8 點傷害',                     fx:(c)=>{ hurt(c,8); } },
+  hengsao:  { name:'橫掃',      type:'劍',   cost:1, text:'造成 5 點傷害，並使敵人流血 4',      fx:(c)=>{ hurt(c,5); c.bleed += 4; } },
+  lianhuan: { name:'連環腿',    type:'腿',   cost:1, text:'造成 5 點傷害 2 次',                 fx:(c)=>{ hurt(c,5); hurt(c,5); } },
+  dianxue:  { name:'點穴',      type:'腿',   cost:1, text:'造成 7 點傷害，敵人軟弱 1 回合',     fx:(c)=>{ hurt(c,7); c.weak = Math.max(c.weak,1); } },
+  poshi:    { name:'破勢',      type:'掌',   cost:2, text:'造成 18 點傷害，自身受 5 點傷害',    fx:(c)=>{ hurt(c,18); S.hp -= 5; log('破勢反噬，自身受 5 點傷害'); } },
+  tuishou:  { name:'推手',      type:'掌',   cost:1, text:'獲得 6 點護體',                      fx:()=>{ S.block += 6; } },
+  tuna:     { name:'吐納',      type:'內功', cost:0, text:'抽 1 張牌',                          fx:()=>{ draw(1); } },
+  yangqi:   { name:'養氣',      type:'內功', cost:1, text:'獲得 1 點氣，抽 1 張牌',             fx:()=>{ S.energy += 1; draw(1); } },
+  yunqi:    { name:'運氣療傷',  type:'內功', cost:1, text:'護體 4，回復 3 點生命',              fx:()=>{ S.block += 4; S.hp = Math.min(S.maxHp, S.hp+3); } },
 };
 const START_DECK = ['zhijian','zhijian','zhijian','tuishou','tuishou','tuna','lianhuan','dianxue','yunqi','poshi','hengsao','yangqi'];
 const ENEMIES = [
-  { name:'山賊',   hp:42, dmg:9,  note:'單純，每回合硬打' },
-  { name:'鏢師',   hp:50, dmg:7,  note:'有時格擋，處理慢' },
-  { name:'掌門',   hp:62, dmg:11, note:'會蓄勢，下一擊加倍' },
+  { name:'山賊',   hp:44, hits:2, dmg:7,  note:'兩連擊，護體會被拆開' },
+  { name:'鏢師',   hp:56, hits:2, dmg:8,  note:'兩連擊，攻高血厚' },
+  { name:'掌門',   hp:68, hits:2, dmg:10, note:'兩連擊，蓄勢時每擊加倍' },
 ];
-const KEY = 'wuxia_spike_001_stats';
+const KEY = 'wuxia_spike_001_stats_v2';
 
-// ── 江湖記憶（跨局狀態）──
+// ── 江湖記憶（跨局）：上局最常用「招式類型」被破招 ──
 let meta = load();
 function load(){
-  try { const m = JSON.parse(localStorage.getItem(KEY)); if (m && m.runs >= 0) return m; } catch(e){}
-  return { runs:0, wins:0, uses:{}, ban:null };
+  try { const m = JSON.parse(localStorage.getItem(KEY)); if (m && typeof m.runs === 'number') return m; } catch(e){}
+  return { runs:0, wins:0, typeUses:{}, ban:null };
 }
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(meta)); } catch(e){} }
 
-// ── 局內狀態 ──
-let S = null;
+let S = null, drawPile = [], LOG = [];
 function newRun(){
-  S = {
-    hp:60, maxHp:60, energy:0, energyMax:3, block:0, turn:0,
-    drawPile:[], hand:[], discard:[], uses:{}, enemy:null, idx:0, over:false
-  };
+  LOG = [];
+  S = { hp:60, maxHp:60, energy:0, energyMax:3, block:0, turn:0,
+        hand:[], discard:[], uses:{}, typeUses:{}, enemy:null, idx:0, over:false };
   drawPile = shuffle(START_DECK.slice());
   log('— 新局開始 —');
+  if (meta.ban) log(`江湖記憶：你上局最常用【${meta.ban}】，本局${meta.ban}類招式效果 −30%`);
   startFight(0);
 }
-let drawPile = [];
 function startFight(i){
   const base = ENEMIES[i];
   S.idx = i;
-  S.enemy = { name: base.name, hp: base.hp, maxHp: base.hp, dmg: base.dmg,
-              bleed:0, weak:0, block:0, charged:false, note: base.note };
+  S.enemy = { name: base.name, hp: base.hp, maxHp: base.hp, dmg: base.dmg, hits: base.hits || 1,
+              bleed:0, weak:0, charged:false, note: base.note };
   S.block = 0;
   log(`遇上【${base.name}】(${base.note})`);
   playerTurnStart();
@@ -103,12 +103,11 @@ function playerTurnStart(){
   S.turn++;
   S.energy = S.energyMax;
   S.block = 0;
+  S.typesThisTurn = new Set();
   const e = S.enemy;
-  e.block = 0;
-  e.intentCharge = (e.name === '掌門' && e.hp > e.maxHp/2 && !e.charged && Math.random() < .4);
-  if (e.intentCharge) e.charged = true;
+  if (e.name === '掌門' && e.hp > e.maxHp/2 && !e.charged && Math.random() < .5) e.charged = true;
   else if (e.weak > 0) e.weak--;
-  draw(5);
+  draw(7);
   render();
 }
 function draw(n){
@@ -124,11 +123,14 @@ function draw(n){
 }
 
 // ── 行動 ──
-function banned(){ return meta.ban; }
+function isBanned(type){ return !!type && meta.ban === type; }
 function hurt(c, dmg){
-  if (banned() && S.lastPlayed === banned()) dmg = Math.max(1, Math.round(dmg*0.7));
+  const t = S.lastType;
+  let note = '';
+  if (isBanned(t)) { dmg = Math.max(1, Math.round(dmg*0.7)); note += '（被破招）'; }
+  if (S.typesThisTurn && S.typesThisTurn.size >= 2) { dmg = Math.round(dmg*1.25); note += '（變招 +25%）'; }
   c.hp -= dmg;
-  log(`對【${c.name}】造成 ${dmg} 點傷害`);
+  log(`對【${c.name}】造成 ${dmg} 點傷害${note}`);
   if (c.hp <= 0) victory();
 }
 function playCard(i){
@@ -138,12 +140,13 @@ function playCard(i){
   if (S.energy < card.cost) { log(`氣不足，無法施展【${card.name}】`); return; }
   S.energy -= card.cost;
   S.hand.splice(i,1); S.discard.push(id);
-  S.uses[id] = (S.uses[id]||0) + 1;
-  S.lastPlayed = id;
-  const broken = banned() === id;
-  log(`施展【${card.name}】${broken ? '（被破招，效果減弱）' : ''}`);
+  S.uses[id] = (S.uses[id]||0)+1;
+  S.typeUses[card.type] = (S.typeUses[card.type]||0)+1;
+  S.lastType = card.type;
+  S.typesThisTurn.add(card.type);
+  log(`施展【${card.name}】（${card.type}）`);
   card.fx(S.enemy);
-  S.lastPlayed = null;
+  S.lastType = null;
   if (S.hp <= 0) { defeat(); return; }
   render();
 }
@@ -153,81 +156,89 @@ function endTurn(){
   const c = S.enemy;
   if (c.hp <= 0) return;
   if (c.bleed > 0){ c.hp -= c.bleed; log(`【${c.name}】流血受 ${c.bleed} 點傷害`); c.bleed = Math.floor(c.bleed/2); if (c.hp <= 0){ victory(); return; } }
-  let dmg = c.dmg;
-  if (c.charged){ dmg *= 2; c.charged = false; log(`【${c.name}】蓄勢爆發！`); }
-  if (c.weak > 0){ dmg = Math.round(dmg*0.75); }
-  const absorbed = Math.min(S.block, dmg);
-  S.hp -= (dmg - absorbed);
-  log(`【${c.name}】攻擊 ${dmg} 點（護體擋 ${absorbed}）`);
+  let base = c.dmg;
+  if (c.charged){ base *= 2; c.charged = false; log(`【${c.name}】蓄勢爆發！`); }
+  if (c.weak > 0) base = Math.round(base*0.75);
+  const hits = c.hits || 1;
+  let totalDealt = 0, totalBlocked = 0, detail = [];
+  for (let h=0; h<hits; h++){
+    const absorbed = Math.min(S.block, base);
+    S.block -= absorbed;
+    const dealt = base - absorbed;
+    S.hp -= dealt;
+    totalDealt += dealt; totalBlocked += absorbed;
+    detail.push(`${base}${absorbed ? `(擋${absorbed})` : ''}`);
+    if (S.hp <= 0) break;
+  }
+  log(`【${c.name}】${hits}連擊 ${detail.join(' + ')}：共扣 ${totalDealt} 點（護體擋 ${totalBlocked}）`);
   if (S.hp <= 0){ defeat(); return; }
   playerTurnStart();
 }
 function victory(){
   log(`擊敗【${S.enemy.name}】`);
   if (S.idx + 1 < ENEMIES.length){
-    S.hp = Math.min(S.maxHp, S.hp + 10);
-    log('調息：回復 10 點生命');
-    startFight(S.idx + 1);
-  } else endRun(true);
+    S.hp = Math.min(S.maxHp, S.hp + 5);
+    log('短暫調息：回復 5 點生命');
+    startFight(S.idx+1);
+  }
+  else endRun(true);
 }
 function defeat(){ log('你倒下了。'); endRun(false); }
 function endRun(win){
   S.over = true;
   meta.runs++; if (win) meta.wins++;
-  const top = topCard(S.uses);
+  const top = topType(S.typeUses);
   meta.ban = top;
-  for (const k in S.uses) meta.uses[k] = (meta.uses[k]||0) + S.uses[k];
+  for (const k in S.typeUses) meta.typeUses[k] = (meta.typeUses[k]||0) + S.typeUses[k];
   save();
-  log(`— 本局結束（${win ? '勝' : '敗'}）｜你最常用：${top ? CARDS[top].name : '—'}，下一局敵人會針對這招 —`);
+  log(`— 本局結束（${win?'勝':'敗'}）｜你最常用【${top||'—'}】，下一局${top||''}類招式會被破招 —`);
   render();
 }
-function topCard(uses){
-  let best=null, n=0;
-  for (const k in uses) if (uses[k] > n) { n = uses[k]; best = k; }
-  return best;
-}
+function topType(u){ let b=null,n=0; for (const k in u) if (u[k]>n){ n=u[k]; b=k; } return b; }
 
 // ── 畫面 ──
 function render(){
   const e = S.enemy;
   document.getElementById('meta').innerHTML =
     `<div class="row"><span class="stat">局數 <b>${meta.runs}</b>　勝 <b>${meta.wins}</b></span>
-     <span class="stat">江湖記憶（上局最常用 → 本局被破招）：${meta.ban ? '<span class="ban">'+CARDS[meta.ban].name+'</span>' : '（未有記錄）'}</span></div>`;
+     <span class="stat">江湖記憶：${meta.ban ? '<span class="ban">'+meta.ban+'類 −30%</span>' : '（未有記錄）'}</span></div>`;
   document.getElementById('enemy').innerHTML = e ?
     `<div class="row"><span class="name big">${e.name}</span><span class="stat">生命 ${Math.max(0,e.hp)} / ${e.maxHp}</span></div>
-     <div class="row" style="margin-top:6px"><span class="intent">意圖：${e.hp<=0 ? '—' : (e.charged ? '蓄勢（下一擊加倍）' : `攻擊 ${e.weak>0?Math.round(e.dmg*.75):e.dmg}`)}</span>
+     <div class="row" style="margin-top:6px"><span class="intent">意圖：${e.hp<=0 ? '—' : (e.charged ? '蓄勢（每擊加倍）' : `${e.hits>1?e.hits+'連擊 ':''}攻擊 ${e.weak>0?Math.round(e.dmg*.75):e.dmg}`)}</span>
      <span class="stat">${e.bleed>0 ? '流血 '+e.bleed+'　' : ''}${e.weak>0 ? '軟弱 '+e.weak+' 回合' : ''}</span></div>` : '';
   document.getElementById('me').innerHTML =
-    `<div class="row"><span class="name">你</span><span class="stat">生命 ${Math.max(0,S.hp)} / ${S.maxHp}　護體 ${S.block}　氣 ${S.energy} / ${S.energyMax}</span></div>`;
+    `<div class="row"><span class="name">你</span><span class="stat">生命 ${Math.max(0,S.hp)} / ${S.maxHp}　護體 ${S.block}　氣 ${S.energy} / ${S.energyMax}</span></div>
+     <div class="row" style="margin-top:6px"><span class="stat">變招：本回合已用【${[...(S.typesThisTurn||[])].join('・') || '—'}】${(S.typesThisTurn&&S.typesThisTurn.size>=2) ? '<b>　傷害 +25%</b>' : '（混用 2 種招式類型即 +25% 傷害）'}</span></div>`;
   const hand = document.getElementById('hand');
-  hand.innerHTML = '';
+  hand.innerHTML = ''; hand.children.length = 0;
   S.hand.forEach((id,i)=>{
     const c = CARDS[id];
     const b = document.createElement('button');
-    b.className = 'card' + (banned()===id ? ' banned' : '');
+    b.className = 'card' + (isBanned(c.type) ? ' banned' : '');
     b.disabled = S.energy < c.cost || S.over || !S.enemy || S.enemy.hp <= 0;
-    b.innerHTML = `<span class="cost">氣 ${c.cost}</span><span class="cname">${c.name}</span>
-                   <div class="ctext">${c.text}${banned()===id ? '<br><b>今局被破招：效果 −30%</b>' : ''}</div>`;
+    b.innerHTML = `<span class="cost">氣 ${c.cost}</span><span class="cname">${c.name}</span> <span class="ctype">${c.type}</span>
+                   <div class="ctext">${c.text}${isBanned(c.type) ? '<br><b>被破招 −30%</b>' : ''}</div>`;
     b.onclick = ()=>playCard(i);
     hand.appendChild(b);
   });
-  document.getElementById('log').innerHTML = LOG.slice(-40).map(l=>'· '+l).join('<br>');
-  const lg = document.getElementById('log'); lg.scrollTop = lg.scrollHeight;
+  const lg = document.getElementById('log');
+  lg.innerHTML = LOG.slice(-40).map(l=>'· '+l).join('<br>');
+  lg.scrollTop = lg.scrollHeight;
 }
-let LOG = [];
 function log(s){ LOG.push(s); }
-
-// ── 工具 ──
 function shuffle(a){ for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
 document.getElementById('endTurn').onclick = endTurn;
-document.getElementById('restart').onclick = ()=>{ LOG=[]; newRun(); render(); };
+document.getElementById('restart').onclick = ()=>{ newRun(); render(); };
 document.addEventListener('keydown', ev=>{
   if (ev.code === 'Space' || ev.key === 'Enter'){ ev.preventDefault(); endTurn(); }
-  else if (ev.key === 'r' || ev.key === 'R'){ LOG=[]; newRun(); render(); }
+  else if (ev.key === 'r' || ev.key === 'R'){ newRun(); render(); }
   else if (/^[1-9]$/.test(ev.key)) playCard(parseInt(ev.key,10)-1);
 });
-// 測試接口（browser 驗證用）
-window.spike = { get S(){ return S; }, playCard, endTurn, newRun, meta:()=>meta, CARDS, setBan:(id)=>{ meta.ban=id; save(); render(); } };
+// 測試接口（sim 用）
+window.spike = { get S(){ return S; }, playCard, endTurn, newRun, meta:()=>meta, CARDS,
+                 resetMeta:()=>{ meta = { runs:0, wins:0, typeUses:{}, ban:null }; save(); },
+                 setBan:(t)=>{ meta.ban = t; save(); render(); } };
 
 newRun();
 render();
