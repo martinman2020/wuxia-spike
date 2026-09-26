@@ -210,4 +210,24 @@
 <p><code>`</code></p>
 
 <p>模擬用 DOM stub 抽出 <code>index.html</code> 內嘅腳本，唔需要瀏覽器。已知盲點：AI 唔會 plan 未來回合、唔會為咗下回合留牌，所以 AI 勝率<b>低估</b>人類玩家嘅實際表現。</p>
+
+<hr>
+
+<h2>12. 美術層（spike 002 階段，2026-09-25 加入）</h2>
+
+<p>遊戲頂部多了一行「美術風格」切換：<b>無美術 / 水墨 / 木刻 / 平面</b>，選擇會存落 localStorage（key <code>wuxia_art_style</code>）。</p>
+
+<table>
+<tr><th>項目</th><th>說明</th></tr>
+<tr><td>素材位置</td><td><code>spikes/002-art-style/assets/</code>（原圖 1024² PNG）＋ <code>webp/</code>（560px WebP，31.4 / 36.4 / 13.9 KB）</td></tr>
+<tr><td>部署路徑</td><td><code>https://martinman2020.github.io/wuxia-spike/art/styleA.webp</code>（A=水墨、B=木刻、C=平面）</td></tr>
+<tr><td>生成方式</td><td>AI 生成（text-to-image），三個風格各一張測試圖</td></tr>
+</table>
+
+<p><b>重要限制（唔好當佢係正式美術）</b>：</p>
+<li>目前<b>每個風格只有一張圖</b>，九張牌同三個敵人全部係同一張圖用唔同 <code>object-position</code> 裁切出嚟</li><li>即係你可以用嚟判斷「風格順唔順眼、牌面夠唔夠清楚、手感有冇改善」，但<b>唔可以</b>用嚟評估真實美術成本</li><li>真正嘅產線成本測試要等到選定風格之後，生成 9 張招式圖 + 3 張敵人圖（spike 003）</li>
+
+<p><b>已加入嘅輕量 juice</b>：卡牌 hover 上浮 + 按下縮放、敵人受擊時面板閃紅。</p>
+
+<p><b>注意</b>：美術對第 8 節嘅數據結論<b>冇影響</b> —— 亂按仍然係最高勝率策略之一。美術唔會令遊戲變得有決策。</p>
 </main></body></html>
